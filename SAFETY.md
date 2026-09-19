@@ -36,6 +36,23 @@ Until that exists, treat the figures as well-reasoned estimates, not measured
 truths. This is stated plainly rather than buried because the distinction
 matters to anyone deciding how much weight to give the output.
 
+## Symptoms are used for urgency, never for a diagnosis
+
+Symptom descriptions are collected, because they are genuinely informative
+and because they are what makes the acute screen work. They are deliberately
+*not* used to name a condition.
+
+Two reasons. A named diagnosis invites self-treatment, which is the concrete
+harm. And a keyword match made without examining anyone is often wrong, so
+naming something frightening has a real cost and poor specificity to justify
+it. Urgency is the part that is both actionable and gettable-right.
+
+So combinations that are unremarkable apart but time-sensitive together — a
+headache with morning vomiting, thirst with frequent urination,
+breathlessness with swollen ankles — return how soon to be seen and the
+specific details worth mentioning to a clinician. Never a label. A test
+asserts that no pattern's text names a condition.
+
 ## Acute symptoms bypass scoring entirely
 
 Returning a ten-year risk percentage to someone describing chest pain would be
@@ -56,14 +73,19 @@ must not — and those cases are locked into the test suite.
 Three rules, enforced in code rather than left to good intentions:
 
 **Numbers are withheld unless they are earned, and "enough" depends on age.**
-Under 30, lifestyle and body composition carry most of the signal and almost
-nobody has had a blood test, so an estimate is given without one. From 30,
-blood pressure is required. From 45 — when metabolic disease is common and
-often silent — a glycaemic marker is required, because lifestyle alone stops
-telling people apart. Below the bar, the response carries no probabilities at
-all, just specific questions and the reason for them. It does not return a
-hedged number with a caveat attached, because anything handed a number will
-present it as final regardless of the caveat.
+Under 30, lifestyle and body composition carry most of the signal. From 30,
+three questions anyone can answer from memory are also needed — blood
+pressure medication, ever being told your blood sugar was high, whether you
+eat vegetables most days — because past that age habits alone stop telling
+people apart.
+
+No age requires a test. Roughly half of UK over-40s have not had an NHS
+Health Check, so a hard blood requirement would refuse the people this is
+most useful to. Blood pressure and blood markers raise the confidence ceiling
+instead. Below the bar the response carries no probabilities at all, just
+specific questions and the reason for them — it does not return a hedged
+number with a caveat, because anything handed a number presents it as final
+regardless of the caveat.
 
 **An estimate says what it rests on.** Confidence is capped by the evidence
 behind it: a lifestyle-only assessment cannot report the same certainty as

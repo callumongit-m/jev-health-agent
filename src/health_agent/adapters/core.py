@@ -30,8 +30,15 @@ def assess(
     scorer: RiskScorer | None = None,
 ) -> dict[str, Any]:
     """Run the agent end to end and return the adapter-neutral payload."""
+    unit_notes: dict[str, str] = {}
+    unit_problems: list[str] = []
     if isinstance(profile, dict):
-        profile = HealthProfile(**{k: v for k, v in profile.items() if v is not None})
+        from health_agent.domain.units import normalise
+
+        clean, unit_notes, unit_problems = normalise(
+            {k: v for k, v in profile.items() if v is not None}
+        )
+        profile = HealthProfile(**clean)
 
     config = {"configurable": {"thread_id": thread_id}} if thread_id else None
     final = _graph(scorer).invoke(
@@ -39,6 +46,12 @@ def assess(
     )
 
     payload = build_payload(final)
+    if unit_notes:
+        # Anything inferred rather than stated is surfaced, so a wrong guess
+        # gets corrected instead of quietly shaping the whole assessment.
+        payload["units_interpreted"] = unit_notes
+    if unit_problems:
+        payload["unit_problems"] = unit_problems
     # life expectancy is produced by the actuarial tool inside the loop; surface
     # it at the top level so callers do not have to parse the prose
     for message in reversed(final.get("messages") or []):

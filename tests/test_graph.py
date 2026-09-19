@@ -11,6 +11,8 @@ COMPLETE = HealthProfile(
     diastolic_bp=92, hba1c_mmol_mol=46, smoking_status=SmokingStatus.FORMER,
     alcohol_units_per_week=22, moderate_activity_minutes_per_week=40,
     sleep_hours_avg=5.8, diet_quality_self_rating=2, perceived_stress_rating=4,
+    on_bp_medication=False, previously_high_glucose=False,
+    eats_vegetables_daily=True,
 )
 
 

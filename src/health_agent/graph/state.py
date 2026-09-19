@@ -26,6 +26,8 @@ class AgentState(TypedDict, total=False):
     life_expectancy: dict[str, Any] | None
 
     red_flags: list[str]
+    symptom_patterns: list[str]
+    urgent_guidance: str | None
     clarifying_questions: list[str]
     status: Status
     answer: str | None

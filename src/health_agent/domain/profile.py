@@ -107,6 +107,23 @@ class HealthProfile(BaseModel):
         default=None, ge=1, le=5, description="1 = none, 5 = severe"
     )
 
+    # --- recall questions -------------------------------------------
+    # These need no test and no equipment, and they carry most of what a
+    # validated non-invasive diabetes score (FINDRISC) asks for. They are
+    # what makes an estimate possible for the ~half of over-40s who have
+    # never had, or cannot recall, their bloods.
+    on_bp_medication: bool | None = Field(
+        default=None, description="ever prescribed medication for blood pressure"
+    )
+    previously_high_glucose: bool | None = Field(
+        default=None,
+        description="ever told by a clinician their blood sugar was high, "
+                    "including in pregnancy",
+    )
+    eats_vegetables_daily: bool | None = Field(
+        default=None, description="vegetables, fruit or berries most days"
+    )
+
     # --- history ------------------------------------------------------
     family_history: list[str] = Field(default_factory=list)
     existing_conditions: list[str] = Field(default_factory=list)

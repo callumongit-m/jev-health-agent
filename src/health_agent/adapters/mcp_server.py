@@ -56,25 +56,36 @@ def _privacy_footer(payload: dict[str, Any]) -> dict[str, Any]:
     description=(
         "Estimate this person's probability of developing common chronic "
         "conditions, their life expectancy, and the changes that would help "
-        "most. Pass whatever you know; omit what you do not. If the data is "
-        "too thin the tool returns targeted follow-up questions instead of a "
-        "guess -- ask them and call again.\n\n" + NOTICE
+        "most.\n\n"
+        "Measurements accept any unit -- \"5'11\", 13 stone 4, 32in, 5.7%\" "
+        "all work. Pass them as the person said them; do not convert, and do "
+        "not ask them to.\n\n"
+        "Pass whatever you know and omit what you do not. Nothing here needs "
+        "a blood test: three recall questions (blood pressure medication, "
+        "ever being told their blood sugar was high, whether they eat "
+        "vegetables most days) are enough to produce an estimate at any age. "
+        "If the data is still too thin the tool returns targeted follow-up "
+        "questions instead of a guess -- ask them and call again.\n\n"
+        "If they mention any current symptoms, pass them in `symptoms` or "
+        "`notes`. Combinations that warrant urgent attention are picked up "
+        "there and returned as `act_on_this_first`.\n\n" + NOTICE
     ),
 )
 def assess_health(
     age: Annotated[int | None, Field(None, ge=0, le=120)] = None,
     sex: Annotated[Literal["male", "female", "other"] | None, Field(None)] = None,
-    height_cm: Annotated[float | None, Field(None, gt=0, le=260)] = None,
-    weight_kg: Annotated[float | None, Field(None, gt=0, le=500)] = None,
+    height_cm: Annotated[str | float | None, Field(None, description="any unit: 180, 5'11\", 1.8m, 71in")] = None,
+    weight_kg: Annotated[str | float | None, Field(None, description="any unit: 85kg, 187lb, 13 stone 4")] = None,
+    waist_cm: Annotated[str | float | None, Field(None, description="any unit: 82cm or 32in. Better than BMI, and unlike BMI it does not mistake muscle for fat")] = None,
     systolic_bp: Annotated[int | None, Field(None, ge=50, le=300, description="top number")] = None,
     diastolic_bp: Annotated[int | None, Field(None, ge=30, le=200)] = None,
     resting_hr: Annotated[int | None, Field(None, ge=25, le=220)] = None,
-    hba1c_mmol_mol: Annotated[float | None, Field(None, ge=15, le=200, description="IFCC mmol/mol, not DCCT %")] = None,
-    fasting_glucose_mmol_l: Annotated[float | None, Field(None, ge=1, le=40)] = None,
-    total_cholesterol_mmol_l: Annotated[float | None, Field(None, ge=1, le=20)] = None,
-    hdl_mmol_l: Annotated[float | None, Field(None, ge=0.1, le=6)] = None,
-    ldl_mmol_l: Annotated[float | None, Field(None, ge=0.1, le=15)] = None,
-    triglycerides_mmol_l: Annotated[float | None, Field(None, ge=0.1, le=30)] = None,
+    hba1c_mmol_mol: Annotated[str | float | None, Field(None, description="either scale: 39 mmol/mol or 5.7%")] = None,
+    fasting_glucose_mmol_l: Annotated[str | float | None, Field(None, description="mmol/L or mg/dL")] = None,
+    total_cholesterol_mmol_l: Annotated[str | float | None, Field(None, description="mmol/L or mg/dL")] = None,
+    hdl_mmol_l: Annotated[str | float | None, Field(None, description="mmol/L or mg/dL")] = None,
+    ldl_mmol_l: Annotated[str | float | None, Field(None, description="mmol/L or mg/dL")] = None,
+    triglycerides_mmol_l: Annotated[str | float | None, Field(None, description="mmol/L or mg/dL")] = None,
     egfr: Annotated[float | None, Field(None, ge=1, le=200)] = None,
     alt_u_l: Annotated[float | None, Field(None, ge=1, le=1000)] = None,
     smoking_status: Annotated[Literal["never", "former", "current"] | None, Field(None)] = None,
@@ -86,6 +97,9 @@ def assess_health(
     sleep_efficiency_pct: Annotated[float | None, Field(None, ge=0, le=100)] = None,
     diet_quality_self_rating: Annotated[int | None, Field(None, ge=1, le=5, description="1 poor, 5 excellent")] = None,
     perceived_stress_rating: Annotated[int | None, Field(None, ge=1, le=5, description="1 none, 5 severe")] = None,
+    on_bp_medication: Annotated[bool | None, Field(None, description="ever prescribed blood pressure medication")] = None,
+    previously_high_glucose: Annotated[bool | None, Field(None, description="ever told their blood sugar was high, including in pregnancy")] = None,
+    eats_vegetables_daily: Annotated[bool | None, Field(None, description="vegetables, fruit or berries most days")] = None,
     family_history: Annotated[list[str] | None, Field(None, description="e.g. ['type 2 diabetes', 'heart disease']")] = None,
     existing_conditions: Annotated[list[str] | None, Field(None)] = None,
     medications: Annotated[list[str] | None, Field(None)] = None,

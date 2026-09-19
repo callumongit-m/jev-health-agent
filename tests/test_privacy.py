@@ -31,7 +31,7 @@ def test_every_clinical_field_is_marked_sensitive():
     }
     # fields added later must be classified deliberately, not by omission
     assert missing <= {
-        "waist_cm", "years_smoked", "sleep_hours_avg", "sleep_efficiency_pct", "steps_daily_avg",
+        "years_smoked", "sleep_hours_avg", "eats_vegetables_daily", "sleep_efficiency_pct", "steps_daily_avg",
         "moderate_activity_minutes_per_week", "diet_quality_self_rating",
         "perceived_stress_rating", "alcohol_units_per_week",
     }, f"unclassified fields: {missing}"

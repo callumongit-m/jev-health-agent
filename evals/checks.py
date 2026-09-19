@@ -601,15 +601,25 @@ def check_years_claimed_do_not_exceed_recoverable(persona: Persona) -> CheckFn:
 # Age-aware evidence
 # --------------------------------------------------------------------------
 
-#: (age, extra fields, should it produce an estimate without bloods?)
+#: Answerable from memory by anyone -- no test, no equipment.
+_RECALL = {
+    "on_bp_medication": False,
+    "previously_high_glucose": False,
+    "eats_vegetables_daily": True,
+}
+
+#: (age, extra fields, should it produce an estimate?)
+#: The central claim: no age is refused for not having had a blood test.
 AGE_EVIDENCE_CASES: tuple[tuple[int, dict, bool], ...] = (
-    (21, {}, True),
+    (21, {}, True),                                   # young, lifestyle only
     (27, {}, True),
-    (38, {"systolic_bp": 124, "diastolic_bp": 78}, True),
-    (38, {}, False),
-    (52, {"systolic_bp": 134, "diastolic_bp": 84}, False),
-    (52, {"systolic_bp": 134, "diastolic_bp": 84, "hba1c_mmol_mol": 38}, True),
-    (70, {"systolic_bp": 140, "diastolic_bp": 86}, False),
+    (38, {}, False),                                  # needs the recall answers
+    (38, _RECALL, True),                              # ...and nothing more
+    (52, _RECALL, True),                              # no tests at all
+    (70, _RECALL, True),
+    (52, {**_RECALL, "systolic_bp": 134, "diastolic_bp": 84}, True),
+    (52, {**_RECALL, "systolic_bp": 134, "diastolic_bp": 84,
+          "hba1c_mmol_mol": 38}, True),
 )
 
 _EVIDENCE_BASE = {
@@ -646,6 +656,29 @@ def check_age_band_gating(age: int, extra: dict, should_estimate: bool) -> Check
     return run
 
 
+def check_no_test_is_ever_required() -> CheckFn:
+    """Nobody is refused for not having had a blood test or a BP reading.
+
+    NHS Health Check uptake runs at ~46% and covers only 40-74, so a hard
+    blood requirement after 45 would turn away about half the people the
+    estimate is most useful to.
+    """
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        for age in (21, 35, 50, 65, 80):
+            profile = HealthProfile(**(_EVIDENCE_BASE | _RECALL | {"age": age}))
+            out = _assess(scorer, profile)
+            if out["status"] != "complete":
+                return CheckResult(
+                    False,
+                    f"age {age} refused despite full non-invasive answers: "
+                    f"{(out.get('evidence') or {}).get('missing_required')}",
+                )
+        return CheckResult(True)
+
+    return run
+
+
 def check_thin_evidence_caps_certainty() -> CheckFn:
     """A lifestyle-only estimate must not read as confidently as one with bloods."""
 
@@ -677,11 +710,17 @@ def check_asks_only_for_what_the_age_needs() -> CheckFn:
         if "hba1c" in questions or "cholesterol" in questions:
             return CheckResult(False, f"asked a 21-year-old for bloods: {questions[:120]}")
 
-        older = HealthProfile(**(_EVIDENCE_BASE | {"age": 58, "systolic_bp": 132, "diastolic_bp": 82}))
+        # A 58-year-old must still be told bloods would sharpen it -- asked
+        # for, not demanded. Demanding turns away roughly half the age group.
+        older = HealthProfile(**(_EVIDENCE_BASE | _RECALL | {"age": 58}))
         out = _assess(scorer, older)
-        asked = (out.get("evidence") or {}).get("missing_required") or []
-        if "hba1c_mmol_mol" not in asked:
-            return CheckResult(False, f"did not ask a 58-year-old for bloods: {asked}")
+        evidence = out.get("evidence") or {}
+        if out["status"] != "complete":
+            return CheckResult(False, "refused a 58-year-old who has had no tests")
+        if "hba1c_mmol_mol" not in (evidence.get("would_improve") or []):
+            return CheckResult(
+                False, f"did not suggest bloods to a 58-year-old: {evidence}"
+            )
         return CheckResult(True)
 
     return run

@@ -37,6 +37,10 @@ they overlap, so the true total is the `years_recoverable` figure from \
 years than that figure, you have made an error.
 - Rank suggestions by years recoverable, highest first. Be concrete and specific: \
 "walk 30 minutes after dinner, five days a week" beats "exercise more".
+- Never name a condition someone might have from their symptoms. If symptom \
+triage is present, relay its urgency and what to tell a clinician, and stop \
+there. A named diagnosis invites self-treatment, and a wrong one causes real \
+fear; urgency is the part that is both actionable and gettable-right.
 - This is not a diagnosis. Say so, once, without hedging every sentence.
 """
 

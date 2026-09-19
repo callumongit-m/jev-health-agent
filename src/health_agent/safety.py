@@ -19,6 +19,28 @@ class RedFlag:
     patterns: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class SymptomPattern:
+    """A combination that is alarming together but unremarkable apart.
+
+    Headaches are common. Morning vomiting is common. Headaches that wake you
+    plus morning vomiting is a textbook raised-intracranial-pressure picture,
+    and no single keyword catches it.
+
+    These deliberately name what to *do*, never what someone has. A named
+    diagnosis invites self-treatment and, when wrong -- which a keyword match
+    often is -- causes real harm and real fear. Urgency is the actionable
+    part, and it is the part this can get right.
+    """
+
+    key: str
+    advice: str
+    #: every group must match somewhere in the text
+    all_of: tuple[tuple[str, ...], ...]
+    #: what a clinician will want to hear, so the person can say it
+    tell_them: str
+
+
 EMERGENCY = (
     "This needs urgent medical attention now, not a risk estimate. "
     "Call emergency services (999 in the UK, 911 in the US) or go to A&E."
@@ -119,6 +141,97 @@ RED_FLAGS: tuple[RedFlag, ...] = (
     ),
 )
 
+SEE_SOMEONE_URGENTLY = (
+    "This combination should be looked at urgently -- today if you can. "
+    "Contact your GP and ask for an urgent appointment, or call 111."
+)
+SEE_SOMEONE_SOON = (
+    "This combination is worth getting checked properly rather than waiting "
+    "to see if it passes. Book a GP appointment in the next week or two."
+)
+
+#: Patterns worth flagging. Each is a combination with a recognised urgency,
+#: not an attempt at a differential. The list is short on purpose: every entry
+#: has to earn its place by being both catchable from plain language and
+#: genuinely time-sensitive.
+SYMPTOM_PATTERNS: tuple[SymptomPattern, ...] = (
+    SymptomPattern(
+        key="raised_intracranial_pressure",
+        advice=SEE_SOMEONE_URGENTLY,
+        all_of=(
+            (r"headache", r"head pain"),
+            (r"vomit", r"being sick", r"throwing up", r"nausea"),
+        ),
+        tell_them=(
+            "Say explicitly whether the headache is worse in the morning or "
+            "wakes you from sleep, and whether the vomiting comes without "
+            "nausea first. Those two details change how it is assessed."
+        ),
+    ),
+    SymptomPattern(
+        key="hyperglycaemia",
+        advice=SEE_SOMEONE_URGENTLY,
+        all_of=(
+            (r"thirst", r"drinking a lot", r"always drinking"),
+            (r"weeing", r"urinat", r"peeing", r"toilet all"),
+        ),
+        tell_them=(
+            "Mention any unexplained weight loss and how long this has been "
+            "going on. A finger-prick glucose test takes seconds."
+        ),
+    ),
+    SymptomPattern(
+        key="possible_malignancy",
+        advice=SEE_SOMEONE_URGENTLY,
+        all_of=(
+            (r"weight loss", r"losing weight", r"lost weight"),
+            (r"night sweat", r"fever", r"tired all the time", r"exhaust"),
+        ),
+        tell_them=(
+            "Say how much weight over how long, and that it was not "
+            "intentional. Unintentional loss is what matters."
+        ),
+    ),
+    SymptomPattern(
+        key="cardiac_exertional",
+        advice=SEE_SOMEONE_URGENTLY,
+        all_of=(
+            (r"breathless", r"short of breath", r"puffed"),
+            (r"swollen (?:ankle|leg|feet|foot)",
+             r"(?:ankle|leg|feet|foot)s?\s+(?:are|is|been|look)\s+swollen",
+             r"swelling in (?:my )?(?:legs|ankles|feet)",
+             r"wake up gasping", r"lie flat", r"pillows to sleep"),
+        ),
+        tell_them=(
+            "Mention whether you can lie flat to sleep and how many pillows "
+            "you use. That detail matters a great deal here."
+        ),
+    ),
+    SymptomPattern(
+        key="sleep_apnoea",
+        advice=SEE_SOMEONE_SOON,
+        all_of=(
+            (r"snor", r"stop breathing", r"gasp"),
+            (r"tired", r"exhaust", r"sleepy", r"falling asleep"),
+        ),
+        tell_them=(
+            "Ask whoever you sleep near whether you stop breathing or gasp. "
+            "That observation is often what gets a sleep study arranged."
+        ),
+    ),
+)
+
+_COMPILED_PATTERNS = tuple(
+    (
+        pattern,
+        tuple(
+            tuple(re.compile(alt, re.IGNORECASE) for alt in group)
+            for group in pattern.all_of
+        ),
+    )
+    for pattern in SYMPTOM_PATTERNS
+)
+
 _COMPILED = tuple(
     (flag, tuple(re.compile(p, re.IGNORECASE) for p in flag.patterns))
     for flag in RED_FLAGS
@@ -131,6 +244,38 @@ def detect(*texts: str | None) -> list[RedFlag]:
     if not haystack.strip():
         return []
     return [flag for flag, patterns in _COMPILED if any(p.search(haystack) for p in patterns)]
+
+
+def detect_patterns(*texts: str | None) -> list[SymptomPattern]:
+    """Symptom combinations that are alarming together but not apart."""
+    haystack = " ".join(t for t in texts if t)
+    if not haystack.strip():
+        return []
+    return [
+        pattern
+        for pattern, groups in _COMPILED_PATTERNS
+        if all(any(alt.search(haystack) for alt in group) for group in groups)
+    ]
+
+
+def pattern_guidance(patterns: list[SymptomPattern]) -> str:
+    """What to do and what to tell a clinician. Never what someone has."""
+    if not patterns:
+        return ""
+    lines = [
+        "Some of what you have described is worth acting on sooner rather "
+        "than later. This is about urgency, not a diagnosis -- these "
+        "combinations have plenty of ordinary explanations, and working out "
+        "which is a job for someone who can examine you.",
+        "",
+    ]
+    seen: set[str] = set()
+    for pattern in patterns:
+        if pattern.advice not in seen:
+            lines.append(pattern.advice)
+            seen.add(pattern.advice)
+        lines.append(f"  {pattern.tell_them}")
+    return "\n".join(lines)
 
 
 def advice_for(flags: list[RedFlag]) -> str:

@@ -149,6 +149,9 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
             ("evidence_caps_certainty", "graph", C.check_thin_evidence_caps_certainty())
         )
         built.append(
+            ("no_test_required", "graph", C.check_no_test_is_ever_required())
+        )
+        built.append(
             ("asks_age_appropriate", "graph", C.check_asks_only_for_what_the_age_needs())
         )
 

@@ -29,6 +29,7 @@ SENSITIVE_FIELDS: frozenset[str] = frozenset(
         "hdl_mmol_l", "ldl_mmol_l", "triglycerides_mmol_l", "egfr", "alt_u_l",
         "smoking_status", "cigarettes_per_day", "alcohol_units_per_week",
         "family_history", "existing_conditions", "medications", "symptoms",
+        "waist_cm", "on_bp_medication", "previously_high_glucose",
     }
 )
 

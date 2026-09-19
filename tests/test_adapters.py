@@ -12,7 +12,8 @@ COMPLETE = {
     "smoking_status": "current", "cigarettes_per_day": 25,
     "alcohol_units_per_week": 30, "moderate_activity_minutes_per_week": 20,
     "sleep_hours_avg": 6.0, "diet_quality_self_rating": 2,
-    "perceived_stress_rating": 4,
+    "perceived_stress_rating": 4, "on_bp_medication": False,
+    "previously_high_glucose": False, "eats_vegetables_daily": True,
 }
 
 
@@ -162,7 +163,8 @@ def test_wearable_update_refreshes_an_existing_thread(webhook_client):
         diastolic_bp=92, hba1c_mmol_mol=46, smoking_status=SmokingStatus.FORMER,
         alcohol_units_per_week=22, sleep_hours_avg=5.8, diet_quality_self_rating=2,
         perceived_stress_rating=4, moderate_activity_minutes_per_week=240,
-        steps_daily_avg=11000,
+        steps_daily_avg=11000, on_bp_medication=False,
+        previously_high_glucose=False, eats_vegetables_daily=True,
     )
     webhook.remember("t-test", before_profile)
 

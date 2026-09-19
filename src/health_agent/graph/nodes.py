@@ -21,9 +21,16 @@ CLARIFY_PRIORITY: tuple[tuple[str, str], ...] = (
     ("sex", "What sex were you assigned at birth? It changes the baseline risks."),
     ("height_cm", "How tall are you, in cm?"),
     ("weight_kg", "How much do you weigh, in kg?"),
-    ("waist_cm", "What is your waist measurement in cm, at the navel? It "
-                 "tells us more than BMI, and unlike BMI it does not mistake "
-                 "muscle for fat."),
+    ("on_bp_medication",
+     "Have you ever been prescribed medication for blood pressure?"),
+    ("previously_high_glucose",
+     "Has a doctor or nurse ever told you your blood sugar was high -- at a "
+     "check-up, during an illness, or in pregnancy?"),
+    ("eats_vegetables_daily",
+     "Do you eat vegetables, fruit or berries most days?"),
+    ("waist_cm", "What is your waist measurement? Inches or cm, either is "
+                 "fine. It tells us more than BMI, and unlike BMI it does "
+                 "not mistake muscle for fat."),
     ("smoking_status", "Do you smoke -- never, formerly, or currently?"),
     ("systolic_bp", "Do you know your blood pressure? The top number is enough."),
     ("hba1c_mmol_mol",
@@ -55,12 +62,22 @@ def make_nodes(scorer: RiskScorer):
         profile: HealthProfile = state["profile"]
         texts = [state.get("raw_text"), *profile.symptoms]
         flags = safety.detect(*texts)
-        if not flags:
-            return {"red_flags": []}
+        if flags:
+            return {
+                "red_flags": [f.key for f in flags],
+                "symptom_patterns": [],
+                "status": "seek_care",
+                "answer": safety.advice_for(flags),
+            }
+
+        # Patterns are not emergencies, so they do not stop the assessment.
+        # They ride alongside it: the person still gets their risk picture,
+        # and is told which of what they described is worth acting on now.
+        patterns = safety.detect_patterns(*texts)
         return {
-            "red_flags": [f.key for f in flags],
-            "status": "seek_care",
-            "answer": safety.advice_for(flags),
+            "red_flags": [],
+            "symptom_patterns": [p.key for p in patterns],
+            "urgent_guidance": safety.pattern_guidance(patterns) or None,
         }
 
     def classify(state: AgentState) -> dict:
@@ -209,6 +226,18 @@ def _brief(state: AgentState) -> str:
     if state.get("raw_text"):
         lines += ["", f"They also said: {state['raw_text']}"]
 
+    if state.get("urgent_guidance"):
+        lines += [
+            "",
+            "SYMPTOM TRIAGE -- lead with this, before the risk numbers:",
+            state["urgent_guidance"],
+            "",
+            "Pass this on as written. Do not name a condition it might be, "
+            "do not speculate about a diagnosis, and do not soften the "
+            "urgency. Naming something invites self-treatment and, when a "
+            "keyword match is wrong, causes real fear for no reason.",
+        ]
+
     lines += [
         "",
         "Call actuarial_calc for life expectancy. Then give: what stands out "
@@ -230,6 +259,9 @@ def build_payload(state: AgentState) -> dict:
     }
     if state.get("red_flags"):
         payload["red_flags"] = state["red_flags"]
+    if state.get("urgent_guidance"):
+        payload["act_on_this_first"] = state["urgent_guidance"]
+        payload["symptom_patterns"] = state.get("symptom_patterns") or []
     if state.get("clarifying_questions"):
         payload["questions"] = state["clarifying_questions"]
         payload["data_sufficiency"] = (

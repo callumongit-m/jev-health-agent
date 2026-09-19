@@ -33,6 +33,7 @@ class Tier(StrEnum):
 
     INSUFFICIENT = "insufficient"
     LIFESTYLE = "lifestyle"      # habits and body composition only
+    SCREENING = "screening"      # + recall questions: the FINDRISC inputs
     VITALS = "vitals"            # + blood pressure
     BLOODS = "bloods"            # + glycaemic and lipid markers
 
@@ -41,6 +42,7 @@ class Tier(StrEnum):
         return {
             Tier.INSUFFICIENT: "not enough to estimate",
             Tier.LIFESTYLE: "lifestyle and body composition",
+            Tier.SCREENING: "a validated non-invasive screening picture",
             Tier.VITALS: "lifestyle plus blood pressure",
             Tier.BLOODS: "lifestyle, blood pressure and blood markers",
         }[self]
@@ -56,7 +58,11 @@ class Tier(StrEnum):
         return {
             Tier.INSUFFICIENT: 0.0,
             Tier.LIFESTYLE: 0.55,
-            Tier.VITALS: 0.75,
+            # FINDRISC reaches AUC 0.71-0.77 for undiagnosed diabetes with no
+            # blood test at all, so this tier is genuinely informative -- not
+            # merely better than refusing.
+            Tier.SCREENING: 0.70,
+            Tier.VITALS: 0.80,
             Tier.BLOODS: 1.0,
         }[self]
 
@@ -74,8 +80,17 @@ VITALS_FIELDS = ("systolic_bp",)
 GLYCAEMIC = ("hba1c_mmol_mol", "fasting_glucose_mmol_l")
 LIPIDS = ("total_cholesterol_mmol_l", "hdl_mmol_l", "ldl_mmol_l", "triglycerides_mmol_l")
 
+#: Recall questions -- no test, no equipment, and between them they carry
+#: most of what FINDRISC asks for.
+RECALL_FIELDS = (
+    "on_bp_medication",
+    "previously_high_glucose",
+    "eats_vegetables_daily",
+)
+
 #: How many lifestyle fields must be present before habits mean anything.
 MIN_LIFESTYLE = 3
+MIN_RECALL = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,34 +104,44 @@ class AgeBand:
     recommended_tier: Tier | None = None
 
 
+# Nothing here requires a test to clear. That is deliberate: NHS Health Check
+# uptake runs at roughly 46-48% and only covers 40-74, so requiring bloods
+# after 45 would refuse about half the people it most needs to reach. The
+# recall questions cost nothing, and FINDRISC shows they carry real signal
+# without a needle. Bloods raise the ceiling rather than unlock the door.
 AGE_BANDS: tuple[AgeBand, ...] = (
     AgeBand(
         max_age=29,
         required_tier=Tier.LIFESTYLE,
-        recommended_tier=Tier.VITALS,
+        recommended_tier=Tier.SCREENING,
         rationale=(
             "Under 30, absolute risk is low and lifestyle dominates what "
-            "there is. Bloods sharpen the picture but are not needed for a "
-            "useful answer, and most people this age have never had them."
+            "there is. Most people this age have never had a blood test, and "
+            "requiring one would refuse exactly the people an early warning "
+            "helps most."
         ),
     ),
     AgeBand(
         max_age=44,
-        required_tier=Tier.VITALS,
-        recommended_tier=Tier.BLOODS,
+        required_tier=Tier.SCREENING,
+        recommended_tier=Tier.VITALS,
         rationale=(
-            "From 30, blood pressure starts to carry real signal and is "
-            "easy to get. Bloods matter more each year but are not yet the "
-            "deciding factor."
+            "From 30, a few things you can answer from memory -- blood "
+            "pressure medication, ever being told your blood sugar was high "
+            "-- start carrying real weight. Blood pressure is the next step "
+            "up and is free at most pharmacies."
         ),
     ),
     AgeBand(
         max_age=200,
-        required_tier=Tier.BLOODS,
+        required_tier=Tier.SCREENING,
+        recommended_tier=Tier.BLOODS,
         rationale=(
             "From 45, metabolic and cardiovascular disease is common and "
-            "frequently silent. Lifestyle alone stops discriminating between "
-            "people, which is why screening at this age includes bloods."
+            "often silent, so bloods matter more than at any younger age. "
+            "But only about half of this age group has had them, so the "
+            "estimate is still given without -- with its confidence capped, "
+            "and with what would sharpen it spelled out."
         ),
     ),
 )
@@ -168,14 +193,22 @@ def achieved_tier(profile: HealthProfile) -> Tier:
         return Tier.INSUFFICIENT
 
     tier = Tier.LIFESTYLE
+    if sum(1 for f in RECALL_FIELDS if f in known) >= MIN_RECALL:
+        tier = Tier.SCREENING
     if any(f in known for f in VITALS_FIELDS):
-        tier = Tier.VITALS
+        tier = max(tier, Tier.VITALS, key=lambda t: _ORDER[t])
         if any(f in known for f in GLYCAEMIC):
             tier = Tier.BLOODS
     return tier
 
 
-_ORDER = {Tier.INSUFFICIENT: 0, Tier.LIFESTYLE: 1, Tier.VITALS: 2, Tier.BLOODS: 3}
+_ORDER = {
+    Tier.INSUFFICIENT: 0,
+    Tier.LIFESTYLE: 1,
+    Tier.SCREENING: 2,
+    Tier.VITALS: 3,
+    Tier.BLOODS: 4,
+}
 
 
 def assess(profile: HealthProfile) -> Evidence:
@@ -194,6 +227,10 @@ def assess(profile: HealthProfile) -> Evidence:
     known = profile.known_fields()
 
     missing: list[str] = []
+    if _ORDER[band.required_tier] >= _ORDER[Tier.SCREENING] and (
+        sum(1 for f in RECALL_FIELDS if f in known) < MIN_RECALL
+    ):
+        missing.extend(f for f in RECALL_FIELDS if f not in known)
     if not _has_body(known):
         missing.append("waist_cm" if "height_cm" in known else "height_cm")
         if "weight_kg" not in known and "waist_cm" not in known:
@@ -215,6 +252,8 @@ def assess(profile: HealthProfile) -> Evidence:
     recommended: list[str] = []
     target = band.recommended_tier
     if target and _ORDER[tier] < _ORDER[target]:
+        if _ORDER[target] >= _ORDER[Tier.SCREENING]:
+            recommended.extend(f for f in RECALL_FIELDS if f not in known)
         if _ORDER[target] >= _ORDER[Tier.VITALS] and not any(
             f in known for f in VITALS_FIELDS
         ):
@@ -223,6 +262,15 @@ def assess(profile: HealthProfile) -> Evidence:
             f in known for f in GLYCAEMIC
         ):
             recommended.append("hba1c_mmol_mol")
+    # Past the recommended tier, keep naming the next real improvement.
+    if _ORDER[tier] >= _ORDER[Tier.SCREENING] and not any(
+        f in known for f in VITALS_FIELDS
+    ):
+        recommended.append("systolic_bp")
+    if _ORDER[tier] >= _ORDER[Tier.VITALS] and not any(
+        f in known for f in GLYCAEMIC
+    ):
+        recommended.append("hba1c_mmol_mol")
     if tier is Tier.BLOODS and not any(f in known for f in LIPIDS):
         recommended.append("total_cholesterol_mmol_l")
 

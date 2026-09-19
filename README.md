@@ -57,18 +57,48 @@ blood test — exactly the people an early warning helps most — and waves
 through 55-year-olds whose lifestyle answers no longer discriminate between
 them.
 
-| Age | Needed to get an estimate | Confidence ceiling |
-|---|---|---|
-| under 30 | body composition + lifestyle | 0.55 |
-| 30–44 | + blood pressure | 0.75 |
-| 45+ | + a glycaemic marker | 1.00 |
+| Age | Needed to get an estimate | Ceiling | What raises it |
+|---|---|---|---|
+| under 30 | body composition + lifestyle | 0.55 | recall answers |
+| 30–44 | + three recall answers | 0.70 | blood pressure |
+| 45+ | + three recall answers | 0.70 | blood pressure, then bloods |
 
-Below the bar the agent asks for exactly the missing fields and says why.
-Above it, the estimate stands but its confidence is capped by what it rests
-on, and the report says so — a lifestyle-only estimate should not read with
-the same authority as one backed by bloods. This mirrors how screening
-actually works: the NHS Health Check starts at 40 and includes bloods, and
-the validated risk equations lean on them harder with age.
+**Nothing requires a test.** NHS Health Check uptake runs at roughly 46–48%
+and covers only ages 40–74, so demanding bloods after 45 would refuse about
+half the people the estimate is most useful to. Instead, three questions
+anyone can answer from memory — ever prescribed blood pressure medication,
+ever told your blood sugar was high, do you eat vegetables most days — carry
+enough signal to estimate at any age. That is not a compromise: FINDRISC
+reaches AUC 0.71–0.77 for undiagnosed diabetes with no blood test at all.
+
+Blood pressure and bloods raise the confidence ceiling rather than unlock the
+door. Below the bar the agent asks for exactly what is missing and says why;
+above it, the estimate stands but its confidence is capped by what it rests
+on, and the report states the basis — a recall-only estimate should not read
+with the authority of one backed by bloods.
+
+## Any unit you like
+
+People know their height in feet and inches and their weight in stone.
+Making them convert is friction, and friction is where mistakes happen. So
+`5'11"`, `13 stone 4`, `32in`, `5.7%`, `100 mg/dL` all work, alongside cm, kg
+and mmol/L. Where a unit is genuinely ambiguous the value is normalised by
+plausibility and the assumption is reported back as `units_interpreted`, so a
+wrong guess gets corrected rather than quietly shaping the assessment.
+
+## Symptoms: urgency, not diagnosis
+
+Describing symptoms is telling, and the temptation is to name what they point
+to. It resists that. A named condition invites self-treatment, and a wrong
+keyword match causes real fear for no reason — neither is a good trade for a
+guess made without examining anyone.
+
+What it does instead is recognise *combinations* that are unremarkable apart
+and time-sensitive together — a headache plus morning vomiting, thirst plus
+frequent urination, breathlessness plus swollen ankles — and return how
+urgently to be seen, plus the specific details a clinician will want to hear.
+That is the part that is both actionable and gettable-right. The risk
+assessment still runs alongside it; triage leads the report.
 
 Jev's own sufficiency signal is kept as a veto rather than the gate. It can
 see what a field checklist cannot — contradictory values, a profile that does
@@ -161,7 +191,7 @@ condition is added:
 | `sensitivity` | driving a marker healthy→severe moves it *materially* |
 | `ordering` | declared persona pairs rank correctly |
 | `gate` / `no_unearned_numbers` | thin data returns questions, and no numbers |
-| `age_band` | 21 without bloods is assessable; 52 without them is not |
+| `age_band` / `no_test_required` | no age is refused for having had no tests |
 | `evidence_caps_certainty` | thin evidence cannot claim full confidence |
 | `red_flag` / `no_false_flag` | acute symptoms bypass scoring; ordinary talk does not |
 | `evidenced_priority` | the headline recommendation rests on data we have |
