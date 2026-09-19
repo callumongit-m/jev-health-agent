@@ -125,11 +125,9 @@ def estimate(
     # were established. Without this, a profile of nothing but age and sex
     # still loses years to factors that were never measured.
     raw = [
-        FactorAttribution(
-            key=f.key, label=f.label, years=round(f.years_cost * f.confidence, 3)
-        )
+        FactorAttribution(key=f.key, label=f.label, years=f.expected_years_cost)
         for f in assessment.factors
-        if f.years_cost * f.confidence > 0
+        if f.expected_years_cost > 0
     ]
     raw_total = sum(a.years for a in raw)
     deduction = _saturate(raw_total)

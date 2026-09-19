@@ -26,9 +26,10 @@ Rules:
 - Where a probability's certainty is low, speak in ranges and say why.
 - For life expectancy, call `actuarial_calc`. Do not do the arithmetic yourself: \
 your answer must be reproducible, and mental arithmetic is not.
-- Ground effect sizes with `health_evidence_search` when you would otherwise be \
-asserting a number from memory. If search is unavailable, say the figure is \
-approximate rather than citing a source you cannot check.
+- Use web search when you would otherwise assert an effect size from memory -- \
+what a guideline currently recommends, or how much a given change is shown to \
+help. Cite what you find. If you did not search, say the figure is approximate \
+rather than implying a source you did not check.
 - Only call `set_health_reminder` if the person asked to be reminded.
 - Rank suggestions by years recoverable, highest first. Be concrete and specific: \
 "walk 30 minutes after dinner, five days a week" beats "exercise more".
@@ -93,17 +94,28 @@ class OfflineReasoner:
 
 
 def get_reasoner(tools: Sequence[Any]) -> Any:
-    """Real model when a key is present, offline stand-in otherwise."""
+    """Real model when a key is present, offline stand-in otherwise.
+
+    Anthropic's server-side web search is bound alongside the client tools.
+    ``bind_tools`` passes a raw Anthropic tool schema straight through, and
+    because the search executes on Anthropic's side its results come back in
+    the same response -- it never produces a ``tool_call`` for the graph's
+    ToolNode to handle, so the routing needs no special case.
+    """
     if not os.getenv("ANTHROPIC_API_KEY"):
         return OfflineReasoner().bind_tools(tools)
 
     from langchain_anthropic import ChatAnthropic
 
+    bound: list[Any] = list(tools)
+    if SETTINGS.enable_web_search:
+        bound.append(SETTINGS.web_search_tool)
+
     return ChatAnthropic(
         model=SETTINGS.reasoning_model,
         temperature=SETTINGS.reasoning_temperature,
         max_tokens=2000,
-    ).bind_tools(tools)
+    ).bind_tools(bound)
 
 
 def reasoner_name() -> str:

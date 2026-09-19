@@ -479,3 +479,49 @@ def check_no_numbers_without_confidence(persona: Persona) -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_top_factor_is_evidenced(persona: Persona) -> CheckFn:
+    """The headline recommendation must rest on data we actually have.
+
+    Ranking on raw years lets a factor the classifier knows nothing about --
+    low confidence because the field is missing -- outrank a measured one,
+    and tell someone their biggest lever is something we never observed.
+    """
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        assessment = scorer.score(persona.profile)
+        top = assessment.top_factors(1)[0]
+        best_measured = max(
+            (f for f in assessment.factors if f.confidence >= 0.5),
+            key=lambda f: f.expected_years_cost,
+            default=None,
+        )
+        if best_measured is None:
+            return CheckResult(True, "nothing well-evidenced to compare")
+        if top.expected_years_cost < best_measured.expected_years_cost:
+            return CheckResult(
+                False,
+                f"top factor {top.key} (conf {top.confidence:.2f}) ranked above "
+                f"better-evidenced {best_measured.key}",
+            )
+        return CheckResult(True)
+
+    return run
+
+
+def check_sparse_profile_does_not_invent_a_priority() -> CheckFn:
+    """A profile with almost nothing in it must not surface a confident lever."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        assessment = scorer.score(HealthProfile(age=45, sex="male"))
+        top = assessment.top_factors(1)[0]
+        if top.confidence >= 0.5:
+            return CheckResult(
+                False,
+                f"claimed {top.key} at confidence {top.confidence:.2f} from a "
+                "profile containing only age and sex",
+            )
+        return CheckResult(True)
+
+    return run

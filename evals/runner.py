@@ -99,6 +99,15 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                 )
             )
 
+        for persona in personas.values():
+            built.append(
+                (f"evidenced_priority[{persona.id}]", "jev",
+                 C.check_top_factor_is_evidenced(persona))
+            )
+        built.append(
+            ("no_invented_priority", "jev",
+             C.check_sparse_profile_does_not_invent_a_priority())
+        )
         built.append(("privacy_surfaces", "jev", C.check_privacy_surfaces()))
 
     if suite in ("graph", "all"):

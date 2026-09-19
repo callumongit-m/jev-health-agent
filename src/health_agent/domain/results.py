@@ -73,6 +73,14 @@ class FactorScore(BaseModel):
             return 0.0
         return round(self.severity * spec.max_years_cost, 2)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def expected_years_cost(self) -> float:
+        """Years cost discounted by how sure the classifier is. This is what
+        ranking and the actuarial calculator use -- absent data should not
+        compete with measured data for someone's attention."""
+        return round(self.years_cost * self.confidence, 2)
+
 
 class RiskAssessment(BaseModel):
     """Everything the Jev layer produces. No LLM involved."""
@@ -104,8 +112,15 @@ class RiskAssessment(BaseModel):
         return sorted(self.conditions, key=lambda c: c.probability, reverse=True)[:n]
 
     def top_factors(self, n: int = 3) -> list[FactorScore]:
-        """Highest-leverage modifiable factors -- ranked by years recoverable."""
-        return sorted(self.factors, key=lambda f: f.years_cost, reverse=True)[:n]
+        """Highest-leverage modifiable factors.
+
+        Ranked by *confidence-weighted* years, not raw years. A factor the
+        classifier is unsure about -- typically because the data is missing --
+        must not be presented as someone's biggest lever. Ranking on raw years
+        would tell a person their top priority is smoking when we have no
+        smoking data at all.
+        """
+        return sorted(self.factors, key=lambda f: f.expected_years_cost, reverse=True)[:n]
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -137,11 +137,17 @@ def _brief(state: AgentState) -> str:
             f"  {c.label}: {c.probability:.0%} ({c.band}, certainty {c.certainty:.2f})"
         )
 
-    lines += ["", "Modifiable factors, by years recoverable:"]
-    for f in sorted(assessment.factors, key=lambda x: -x.years_cost):
+    lines += [
+        "",
+        "Modifiable factors, ranked by confidence-weighted years recoverable. "
+        "A low confidence means the data for that factor is thin -- do not "
+        "present it as a priority:",
+    ]
+    for f in assessment.top_factors(len(assessment.factors)):
         lines.append(
             f"  {f.label}: {f.level_label} "
-            f"({f.years_cost} years, confidence {f.confidence:.2f})"
+            f"({f.expected_years_cost} expected years, "
+            f"{f.years_cost} raw, confidence {f.confidence:.2f})"
         )
 
     if state.get("raw_text"):

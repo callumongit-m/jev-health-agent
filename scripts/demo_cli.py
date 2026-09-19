@@ -31,11 +31,11 @@ def render(assessment) -> str:
         bar = BAR * round(c.probability * 30)
         lines.append(f"  {c.label:<26} {c.probability:6.1%}  {bar}")
 
-    lines += ["", "MODIFIABLE FACTORS  (years recoverable)"]
-    for f in sorted(assessment.factors, key=lambda x: -x.years_cost):
+    lines += ["", "MODIFIABLE FACTORS  (expected years, confidence-weighted)"]
+    for f in assessment.top_factors(len(assessment.factors)):
         lines.append(
-            f"  {f.label:<26} {f.years_cost:5.1f} yr  "
-            f"conf {f.confidence:.2f}  {f.level_label}"
+            f"  {f.label:<26} {f.expected_years_cost:5.1f} yr "
+            f"({f.years_cost:4.1f} raw, conf {f.confidence:.2f})  {f.level_label}"
         )
     lines += ["", f"total years at risk from modifiable factors: "
                   f"{assessment.total_years_at_risk}"]
@@ -48,6 +48,15 @@ def main() -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--persona", help="id from evals/cases/personas.yaml")
     source.add_argument("--json", help="a HealthProfile as JSON")
+    source.add_argument(
+        "--apple-health",
+        metavar="PATH",
+        help="an Apple Health export.zip or export.xml (no API key needed)",
+    )
+    parser.add_argument(
+        "--age", type=int, help="age, since Apple Health exports rarely carry it"
+    )
+    parser.add_argument("--sex", choices=["male", "female", "other"])
     parser.add_argument("--text", help="free text the person also said")
     parser.add_argument(
         "--agent", action="store_true",
@@ -65,8 +74,25 @@ def main() -> int:
             print(f"unknown persona. available: {', '.join(personas)}", file=sys.stderr)
             return 2
         profile = personas[args.persona].profile
+    elif args.apple_health:
+        from health_agent.ingest.apple_health import parse_export
+
+        fields, provenance = parse_export(args.apple_health)
+        if not fields:
+            print("no usable records found in that export", file=sys.stderr)
+            return 1
+        print(f"read {len(fields)} fields from the export: {', '.join(sorted(fields))}\n")
+        profile = HealthProfile(**fields, provenance=provenance)
     else:
         profile = HealthProfile(**json.loads(args.json))
+
+    # age and sex drive the actuarial baseline and are rarely in an export
+    overrides = {k: v for k, v in (("age", args.age), ("sex", args.sex)) if v}
+    if overrides:
+        profile = HealthProfile(
+            **(profile.model_dump(exclude={"bmi", "provenance"}) | overrides),
+            provenance=profile.provenance,
+        )
 
     scorer = RiskScorer(get_backend(args.backend, seed=args.seed))
 

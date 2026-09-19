@@ -1,7 +1,11 @@
-"""Tools available to the reasoning node.
+"""Client-side tools available to the reasoning node.
 
 The reason <-> tools cycle is the agentic part: probabilities differ per person,
 so the evidence the model needs differs per person.
+
+Web search is deliberately NOT here. Anthropic's server-side web search runs on
+their infrastructure and returns results inside the same response, so it needs
+no separate provider, no extra API key, and no ToolNode round trip.
 """
 
 from __future__ import annotations
@@ -52,33 +56,6 @@ def actuarial_calc() -> str:
 
 
 @tool
-def health_evidence_search(query: str) -> str:
-    """Search for current clinical evidence on a risk factor or intervention.
-
-    Use for specifics you should not assert from memory: effect sizes, what a
-    guideline currently recommends, or how much a given change is shown to help.
-    Keep the query short and clinical, e.g. "HbA1c reduction from 150 minutes
-    weekly moderate exercise".
-    """
-    if not os.getenv("TAVILY_API_KEY"):
-        return json.dumps(
-            {
-                "unavailable": True,
-                "note": "No search backend configured. Rely on well-established "
-                        "general knowledge and say plainly when a number is "
-                        "approximate rather than citing a source you cannot check.",
-            }
-        )
-    try:
-        from langchain_tavily import TavilySearch
-
-        hits = TavilySearch(max_results=4, topic="general").invoke({"query": query})
-        return json.dumps(hits)[:4000]
-    except Exception as exc:  # a failed search must not kill the assessment
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-
-
-@tool
 def set_health_reminder(what: str, cadence: str) -> str:
     """Schedule a recurring nudge for the person, e.g. a weekly weigh-in or a
     quarterly HbA1c recheck.
@@ -92,4 +69,7 @@ def set_health_reminder(what: str, cadence: str) -> str:
     return json.dumps({"scheduled": True, **reminder})
 
 
-TOOLS = [actuarial_calc, health_evidence_search, set_health_reminder]
+#: Client-side tools only. Web search is Anthropic's server-side tool -- it
+#: runs on their infrastructure and its results arrive in the same response,
+#: so it never reaches the graph's ToolNode. It is attached in `reasoner.py`.
+TOOLS = [actuarial_calc, set_health_reminder]

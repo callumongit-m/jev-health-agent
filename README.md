@@ -42,7 +42,7 @@ one call. The reasoning LLM runs only after, and only on what Jev found.
 | 2 | LangGraph loop, tools, actuarial calculator, red-flag safety | **done** |
 | 3 | MCP adapter (streamable HTTP, verified over JSON-RPC) | **done** |
 | 4 | A2A adapter (agent card, task lifecycle, peer demo) | **done** |
-| 5 | Terra ingest: Apple Health + wearables, signed webhook re-scoring | **done** |
+| 5 | Ingest: Apple Health export (free) + Terra webhook re-scoring | **done** |
 
 Not yet done: deploying the MCP server somewhere public and adding it as a
 custom connector in Claude, and running against the real Jev and Anthropic
@@ -160,6 +160,29 @@ The peer demo exercises all three outcomes:
 3. Acute symptom     SUBMITTED -> WORKING -> COMPLETED        + seek-care, no scoring
 ```
 
+## Wearables without paying for an aggregator
+
+Terra's floor is ~$499/mo, which is not a sensible dependency for this. The
+free path is an **Apple Health export** — no keys, no OAuth, and since Oura,
+Whoop, Garmin, Fitbit and the Watch all write into Apple Health, one export
+covers the same ground for a single user.
+
+On iPhone: Health → profile picture → *Export All Health Data*.
+
+```sh
+uv run python scripts/demo_cli.py --apple-health ~/Downloads/export.zip \
+    --age 34 --sex male --agent
+```
+
+Exports run to hundreds of MB, so the parser streams the XML rather than
+loading it. It windows to the last 28 days, sums step and exercise records
+per day before averaging (Apple writes dozens of partial records a day),
+converts units, and records provenance so a watch reading never overwrites a
+fresher clinical one.
+
+What it does not give you is a live feed — it is a hand-exported snapshot.
+The Terra webhook path stays in the tree for when that matters.
+
 ## Keeping it fresh
 
 `POST /webhooks/terra` takes a signed Terra payload, resumes the **existing**
@@ -180,9 +203,17 @@ Three decisions worth knowing about:
   instructions, every MCP tool description, the A2A agent card and every
   response payload, and tests assert all four. Profile values are redacted
   from logs by field name.
-- **Missing data cannot cost you years.** Factor costs are weighted by the
-  classifier's confidence, and the actuarial calculator refuses outright below
+- **Missing data cannot cost you years, or become your top priority.** Factor
+  costs are weighted by the classifier's confidence everywhere it matters —
+  the actuarial deduction, and the ranking fed to the LLM. Ranking on raw
+  years let an unmeasured factor outrank a measured one and told people their
+  biggest lever was something never observed; `evidenced_priority` in the eval
+  suite exists to keep that fixed. The calculator also refuses outright below
   a sufficiency threshold rather than turning an empty profile into a number.
+- **Web search is Anthropic's server-side tool**, not a third-party provider.
+  No extra key, results arrive in the same response, and citations come with
+  them. The tool type is model-aware: `web_search_20260209` on Claude 4.6+,
+  the basic `web_search_20250305` on Haiku 4.5.
 
 ## Layout
 
