@@ -413,6 +413,10 @@ def get_backend(kind: str = "auto", *, seed: int | None = None) -> ScoringBacken
         return JevBackend()
     if kind == "openrouter":
         return OpenRouterBackend()
+    if kind == "llm":
+        from health_agent.scoring.llm_backend import LLMBackend
+
+        return LLMBackend()
     if kind == "fake":
         return FakeBackend(seed=seed)
     if kind == "auto":
