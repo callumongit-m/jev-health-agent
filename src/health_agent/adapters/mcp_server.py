@@ -68,7 +68,13 @@ def _privacy_footer(payload: dict[str, Any]) -> dict[str, Any]:
         "questions instead of a guess -- ask them and call again.\n\n"
         "If they mention any current symptoms, pass them in `symptoms` or "
         "`notes`. Combinations that warrant urgent attention are picked up "
-        "there and returned as `act_on_this_first`.\n\n" + NOTICE
+        "there and returned as `act_on_this_first`.\n\n"
+        "YOU write the report. The response returns findings plus a "
+        "`presentation` object: include every string in "
+        "`must_include_verbatim` as written, follow `must_not`, and build "
+        "the report around `ranked_actions` in the order given. Those "
+        "sentences are worded the way they are for safety reasons -- "
+        "reproduce them rather than rephrasing them.\n\n" + NOTICE
     ),
 )
 def assess_health(

@@ -100,6 +100,24 @@ a great deal of their harm. Adding their individual costs together overstates
 the recoverable benefit several times over, so a saturating model is applied
 and the reported total is always less than the sum of its parts.
 
+## When someone else writes the report
+
+By default this returns findings and a presentation contract, and the calling
+model writes the report. That model is not under our control, so the contract
+cannot rely on compliance.
+
+Instead, everything that must be right is supplied as a finished sentence to
+reproduce — the triage guidance, the non-diagnostic framing, the warning that
+overlapping factors do not add up, the privacy notice. Reproducing text is a
+far lower bar than following instructions, and it degrades in the right
+direction: a model that ignores every rule but quotes the sentences still
+tells the person the right thing.
+
+This is a real limitation and worth stating plainly: a determined or careless
+caller can still misrepresent the output. What we can do is make the correct
+wording the easiest thing to use, refuse to hand over numbers that have not
+been earned, and test that the contract never silently loses a clause.
+
 ## Data handling
 
 Health data is not being used to train any model. It is sent only to the inference

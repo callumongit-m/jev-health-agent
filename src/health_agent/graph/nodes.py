@@ -143,6 +143,35 @@ def make_nodes(scorer: RiskScorer):
             "tool_calls_made": list(state.get("tool_calls_made") or []) + called,
         }
 
+    def compose(state: AgentState) -> dict:
+        """Findings plus a presentation contract. No model involved.
+
+        The calling model is already sitting in the person's conversation --
+        it has the context, and the person is already paying for it. Running
+        a second model to produce prose the first will rewrite is cost for
+        nothing.
+        """
+        from health_agent.domain import presentation as presentation_rules
+        from health_agent.scoring.actuarial import estimate
+
+        assessment = state["assessment"]
+        profile = state["profile"]
+        life = estimate(assessment, profile)
+        life_dict = life.as_dict() if life else None
+
+        contract = presentation_rules.build(
+            assessment,
+            state["evidence"],
+            life_dict,
+            state.get("urgent_guidance"),
+        )
+        return {
+            "status": "complete",
+            "life_expectancy": life_dict,
+            "presentation": contract.as_dict(),
+            "answer": None,
+        }
+
     def respond(state: AgentState) -> dict:
         final = next(
             (
@@ -159,6 +188,7 @@ def make_nodes(scorer: RiskScorer):
         "screen": screen,
         "classify": classify,
         "clarify": clarify,
+        "compose": compose,
         "reason": reason,
         "respond": respond,
     }
@@ -305,4 +335,7 @@ def build_payload(state: AgentState) -> dict:
         payload["evidence"] = state["evidence"].as_dict()
     if state.get("life_expectancy"):
         payload["life_expectancy"] = state["life_expectancy"]
+    if state.get("presentation"):
+        payload["presentation"] = state["presentation"]
+        payload.pop("answer", None)
     return payload

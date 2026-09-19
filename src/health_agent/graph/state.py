@@ -31,4 +31,5 @@ class AgentState(TypedDict, total=False):
     clarifying_questions: list[str]
     status: Status
     answer: str | None
+    presentation: dict[str, Any] | None
     tool_calls_made: list[str]

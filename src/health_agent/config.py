@@ -8,6 +8,13 @@ from typing import Literal
 
 LifeExpectancyMode = Literal["actuarial", "llm_raw"]
 
+#: "data"     -- return findings plus a presentation contract and let the
+#:               calling model write it up. No LLM cost on our side, which is
+#:               the right default when the caller is already a capable model.
+#: "narrated" -- write the report ourselves, on our key. For callers that have
+#:               no model of their own, or when we need to control the prose.
+ResponseMode = Literal["data", "narrated"]
+
 # Module-level defaults: with slots=True, class attribute access returns a
 # descriptor rather than the default value, so defaults live here instead.
 DEFAULT_REASONING_MODEL = "claude-sonnet-5"
@@ -16,6 +23,7 @@ DEFAULT_SUFFICIENCY_THRESHOLD = 0.4
 #: Age-banded field requirements are the primary gate; the classifier only
 #: overrides them when it objects strongly, so this sits well below them.
 DEFAULT_CLASSIFIER_VETO = 0.15
+DEFAULT_RESPONSE_MODE: "ResponseMode" = "data"
 DEFAULT_CHECKPOINT_PATH = "health_agent.sqlite"
 
 #: Anthropic's server-side web search runs on Anthropic's infrastructure -- no
@@ -56,6 +64,8 @@ class Settings:
     sufficiency_threshold: float = DEFAULT_SUFFICIENCY_THRESHOLD
     #: Only a strong classifier objection overrides the age-band requirements.
     classifier_veto_threshold: float = DEFAULT_CLASSIFIER_VETO
+    #: Who writes the report. See ResponseMode.
+    response_mode: ResponseMode = DEFAULT_RESPONSE_MODE
 
     checkpoint_path: str = DEFAULT_CHECKPOINT_PATH
 
@@ -86,6 +96,7 @@ def load() -> Settings:
         classifier_veto_threshold=float(
             os.getenv("CLASSIFIER_VETO_THRESHOLD", DEFAULT_CLASSIFIER_VETO)
         ),
+        response_mode=os.getenv("RESPONSE_MODE", DEFAULT_RESPONSE_MODE),  # type: ignore[arg-type]
     )
 
 

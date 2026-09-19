@@ -46,10 +46,22 @@ questions — seven conditions, seven modifiable factors, one data-sufficiency
 check — go out in a single call that costs a fraction of a penny and returns
 in under a second. No language model is involved in producing a probability.
 
-**A language model does the explaining.** It sees the classifier's findings —
-never the raw profile — and its job is to explain them, search for current
-evidence where it would otherwise be asserting an effect size from memory, and
-turn the ranking into changes someone can actually make this week.
+**The calling model does the explaining, on its own budget.** Over MCP the
+caller is already a capable model sitting in the person's own subscription,
+with the conversation context. Running a second model to produce prose the
+first will rewrite is cost for no benefit — so the default is to return
+findings plus a *presentation contract* and let the caller write it up.
+
+The contract is the safety layer, and a contract is a request rather than a
+guarantee. So the parts that must be right — the triage wording, the
+non-diagnostic framing, the warning that overlapping factors do not add up —
+are supplied as **finished sentences to quote**, not rules to obey. Quoting
+is a much lower bar than complying, and it fails gracefully: a model that
+ignores the rules but reproduces the text still tells the person the right
+thing. An eval asserts the contract never loses a clause.
+
+`RESPONSE_MODE=narrated` writes the report here instead, for callers with no
+model of their own. That is the only path that needs `ANTHROPIC_API_KEY`.
 
 **What counts as enough evidence depends on your age.** A flat threshold gets
 this wrong in both directions: it refuses 21-year-olds who have never had a
@@ -167,9 +179,10 @@ uv run python scripts/demo_cli.py --apple-health ~/Downloads/export.zip --age 34
 
 Jev runs either directly (`TYPESAFE_API_KEY`) or through OpenRouter's
 Decisions API (`OPENROUTER_API_KEY`, model `~typesafe/jev-latest`) — same
-model, same wire format. Reasoning runs on Claude; `claude-haiku-4-5` is the
-default and costs about £4 per thousand assessments. With no keys at all,
-both fall back to offline stand-ins so everything stays runnable and testable.
+model, same wire format, a fraction of a penny per assessment. That is the
+only API cost in the default path: `ANTHROPIC_API_KEY` is needed only for
+`RESPONSE_MODE=narrated`. With no keys at all, everything falls back to
+offline stand-ins so it stays runnable and testable.
 
 ## Evals: pass^k, not pass@k
 
@@ -192,6 +205,7 @@ condition is added:
 | `ordering` | declared persona pairs rank correctly |
 | `gate` / `no_unearned_numbers` | thin data returns questions, and no numbers |
 | `age_band` / `no_test_required` | no age is refused for having had no tests |
+| `contract_guarantees` | the presentation contract never loses a safety clause |
 | `evidence_caps_certainty` | thin evidence cannot claim full confidence |
 | `red_flag` / `no_false_flag` | acute symptoms bypass scoring; ordinary talk does not |
 | `evidenced_priority` | the headline recommendation rests on data we have |

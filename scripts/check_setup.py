@@ -48,15 +48,24 @@ def main() -> int:
     print(f"{OK if openrouter else WARN}  OPENROUTER_API_KEY  {_mask(openrouter)}")
     if not (typesafe or openrouter):
         print(f"{BAD}  no Jev key -- scoring will use the offline fake")
-    print(f"{OK if anthropic_key else BAD}  ANTHROPIC_API_KEY   {_mask(anthropic_key)}")
-    if not anthropic_key:
-        print("        reasoning will use the offline stand-in")
+    narrated = SETTINGS.response_mode == "narrated"
+    mark = OK if anthropic_key else (BAD if narrated else WARN)
+    print(f"{mark}  ANTHROPIC_API_KEY   {_mask(anthropic_key)}")
+    if not anthropic_key and not narrated:
+        print("        not needed in data mode -- the calling model writes")
+        print("        the report, so there is no LLM cost on this side")
+    elif not anthropic_key:
+        print("        RESPONSE_MODE=narrated needs a key; using the stand-in")
 
     print("\nWHAT A RUN WOULD USE")
     backend = get_backend("auto", seed=0)
     print(f"       scoring    {backend.name}")
-    print(f"       reasoning  "
-          f"{SETTINGS.reasoning_model if anthropic_key else 'offline stand-in'}")
+    print(f"       mode       {SETTINGS.response_mode}"
+          + ("  (caller writes the report, no LLM cost here)"
+             if SETTINGS.response_mode == "data" else ""))
+    if SETTINGS.response_mode == "narrated":
+        print(f"       reasoning  "
+              f"{SETTINGS.reasoning_model if anthropic_key else 'offline stand-in'}")
     print(f"       websearch  "
           f"{SETTINGS.web_search_tool['type'] if SETTINGS.enable_web_search else 'disabled'}")
 
@@ -82,7 +91,7 @@ def main() -> int:
             print(f"{BAD}  Jev call failed: {type(exc).__name__}: {exc}")
             return 1
 
-    if anthropic_key:
+    if anthropic_key and SETTINGS.response_mode == "narrated":
         try:
             from langchain_anthropic import ChatAnthropic
 

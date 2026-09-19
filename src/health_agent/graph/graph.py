@@ -62,6 +62,18 @@ def _gate(state: AgentState) -> Literal["reason", "clarify"]:
     return "reason"
 
 
+def _after_gate(state: AgentState) -> Literal["reason", "compose", "clarify"]:
+    """In data mode the calling model writes the report, so no LLM runs here.
+
+    Life expectancy still needs the actuarial calculator, so `compose` calls
+    it directly rather than asking a model to call it as a tool.
+    """
+    decision = _gate(state)
+    if decision == "clarify":
+        return "clarify"
+    return "reason" if SETTINGS.response_mode == "narrated" else "compose"
+
+
 def _after_reason(state: AgentState) -> Literal["tools", "respond"]:
     messages = state.get("messages") or []
     last = messages[-1] if messages else None
@@ -83,7 +95,10 @@ def build_graph(scorer: RiskScorer | None = None, *, checkpointer=None):
     builder.add_edge(START, "ingest")
     builder.add_edge("ingest", "screen")
     builder.add_conditional_edges("screen", _after_screen, ["classify", END])
-    builder.add_conditional_edges("classify", _gate, ["reason", "clarify"])
+    builder.add_conditional_edges(
+        "classify", _after_gate, ["reason", "compose", "clarify"]
+    )
+    builder.add_edge("compose", END)
     builder.add_edge("clarify", END)
     builder.add_conditional_edges("reason", _after_reason, ["tools", "respond"])
     builder.add_edge("tools", "reason")

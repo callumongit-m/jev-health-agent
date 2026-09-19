@@ -103,6 +103,16 @@ def _to_value(payload: dict) -> Value:
     return ParseDict(payload, Value())
 
 
+def _summarise(payload: dict) -> str:
+    """A readable fallback when the payload carries a contract, not prose."""
+    presentation = payload.get("presentation") or {}
+    lines = [presentation.get("headline", "Assessment complete.")]
+    for action in presentation.get("ranked_actions", [])[:3]:
+        lines.append(f"- {action['action']} (~{action['years_recoverable']} years)")
+    lines += list(presentation.get("must_include_verbatim", []))
+    return "\n".join(l for l in lines if l)
+
+
 def _parse_input(text: str) -> tuple[dict, str | None]:
     """A peer may send JSON, prose, or JSON with prose around it."""
     stripped = (text or "").strip()
@@ -160,10 +170,11 @@ class HealthAgentExecutor(AgentExecutor):
             )
             return
 
-        parts = [
-            Part(text=payload.get("answer") or ""),
-            Part(data=_to_value(payload)),
-        ]
+        # In data mode there is no prose -- the peer writes it from the
+        # contract. Give it a usable text part either way so a peer that only
+        # reads text still gets something meaningful.
+        text = payload.get("answer") or _summarise(payload)
+        parts = [Part(text=text), Part(data=_to_value(payload))]
 
         if payload["status"] == "needs_input":
             # The peer agent must go and ask; we will not invent the answers.
