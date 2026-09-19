@@ -169,7 +169,14 @@ def build_payload(state: AgentState) -> dict:
         payload["red_flags"] = state["red_flags"]
     if state.get("clarifying_questions"):
         payload["questions"] = state["clarifying_questions"]
-    if assessment is not None and state.get("status") != "seek_care":
+        payload["data_sufficiency"] = (
+            round(assessment.data_sufficiency, 3) if assessment else 0.0
+        )
+    # Withhold numbers in both non-scoring states. On seek_care they are
+    # irrelevant and dangerous; on needs_input the gate has already judged them
+    # untrustworthy, and a calling agent given numbers will present them as
+    # final regardless of the caveat attached.
+    if assessment is not None and state.get("status") not in ("seek_care", "needs_input"):
         payload["risk"] = {
             c.key: {
                 "label": c.label,

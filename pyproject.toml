@@ -5,10 +5,13 @@ description = "Health risk agent: Jev classification + LangGraph reasoning, fron
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "a2a-sdk[http-server]>=1.1.4",
+    "fastapi>=0.141.1",
     "langchain>=1.4.2",
     "langchain-anthropic>=1.7.2",
     "langgraph>=1.2.11",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    "mcp[cli]>=2.2.0",
     "pydantic>=2.9",
     "pyyaml>=6.0",
     "typing-extensions>=4.12",
@@ -30,3 +33,4 @@ package = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+asyncio_mode = "auto"

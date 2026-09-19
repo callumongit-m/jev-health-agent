@@ -461,3 +461,21 @@ def check_recommendations_grounded(persona: Persona) -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_no_numbers_without_confidence(persona: Persona) -> CheckFn:
+    """A needs_input or seek_care response must not ship risk numbers: a
+    calling agent handed numbers will present them as final whatever caveat
+    is attached."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        thin = _assess(scorer, HealthProfile(age=persona.profile.age or 40))
+        if thin["status"] == "needs_input" and ("risk" in thin or "factors" in thin):
+            return CheckResult(False, "needs_input response leaked risk numbers")
+
+        acute = _assess(scorer, persona.profile, "crushing chest pain on stairs")
+        if acute["status"] == "seek_care" and ("risk" in acute or "factors" in acute):
+            return CheckResult(False, "seek_care response leaked risk numbers")
+        return CheckResult(True)
+
+    return run

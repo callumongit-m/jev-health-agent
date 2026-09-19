@@ -111,6 +111,10 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
             built.append(
                 (f"privacy_payload[{persona.id}]", "graph", C.check_privacy_in_payload(persona))
             )
+            built.append(
+                (f"no_unearned_numbers[{persona.id}]", "graph",
+                 C.check_no_numbers_without_confidence(persona))
+            )
             if is_sparse:
                 continue
             built.append(

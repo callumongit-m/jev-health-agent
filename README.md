@@ -40,9 +40,13 @@ one call. The reasoning LLM runs only after, and only on what Jev found.
 |---|---|---|
 | 1 | Domain, Jev scoring, eval harness | **done** |
 | 2 | LangGraph loop, tools, actuarial calculator, red-flag safety | **done** |
-| 3 | MCP adapter | next |
-| 4 | A2A adapter | |
-| 5 | Terra ingest (Apple Health + wearables) | |
+| 3 | MCP adapter (streamable HTTP, verified over JSON-RPC) | **done** |
+| 4 | A2A adapter (agent card, task lifecycle, peer demo) | **done** |
+| 5 | Terra ingest: Apple Health + wearables, signed webhook re-scoring | **done** |
+
+Not yet done: deploying the MCP server somewhere public and adding it as a
+custom connector in Claude, and running against the real Jev and Anthropic
+APIs. Both need credentials; everything else runs offline today.
 
 ## Run it
 
@@ -129,13 +133,66 @@ noise floor itself is derived from `backend.noise_sigma` rather than hardcoded.
 The suite is fault-injection tested — `tests/test_evals.py` asserts it *fails* when
 the backend is made to ignore an input, because a suite that cannot fail proves nothing.
 
+## Running the adapters
+
+```sh
+# MCP -- the consumer front door. Paste the URL into Claude's custom connectors.
+uv run python -m health_agent.adapters.mcp_server --transport streamable-http --port 8000
+#   -> http://localhost:8000/mcp
+
+# A2A -- the peer front door.
+uv run python -m health_agent.adapters.a2a_server --port 9000
+curl localhost:9000/.well-known/agent-card.json
+
+# a separate agent that discovers the card and drives a full task,
+# including the input-required round trip
+uv run python scripts/a2a_peer_demo.py
+```
+
+The peer demo exercises all three outcomes:
+
+```
+1. Complete profile  SUBMITTED -> WORKING -> COMPLETED
+2. Thin profile      SUBMITTED -> WORKING -> INPUT_REQUIRED   + questions
+3. Acute symptom     SUBMITTED -> WORKING -> COMPLETED        + seek-care, no scoring
+```
+
+## Keeping it fresh
+
+`POST /webhooks/terra` takes a signed Terra payload, resumes the **existing**
+thread by `reference_id`, merges the new samples with provenance and recency,
+and re-scores. An unsigned or forged payload is rejected — health data that
+cannot be verified is not trusted. Device readings never silently overwrite a
+fresher lab or clinical value.
+
+## Design notes
+
+Three decisions worth knowing about:
+
+- **Numbers are withheld unless they are earned.** On `needs_input` and
+  `seek_care` the response carries no probabilities at all. A calling agent
+  handed numbers will present them as final regardless of the caveat attached,
+  so the gate withholds rather than qualifies.
+- **The privacy notice is structural.** It is injected into the MCP server
+  instructions, every MCP tool description, the A2A agent card and every
+  response payload, and tests assert all four. Profile values are redacted
+  from logs by field name.
+- **Missing data cannot cost you years.** Factor costs are weighted by the
+  classifier's confidence, and the actuarial calculator refuses outright below
+  a sufficiency threshold rather than turning an empty profile into a number.
+
 ## Layout
 
 ```
 src/health_agent/
   domain/      profile, condition registry, result shapes
-  scoring/     Jev backend, offline fake, scorer
+  scoring/     Jev backend, offline fake, scorer, actuarial calculator
+  graph/       state, nodes, tools, reasoner, StateGraph wiring
+  adapters/    core (shared), mcp_server, a2a_server, webhook
+  ingest/      terra (Apple Health + wearables, one integration)
+  store/       reminders -- the only thing that outlives a session
+  safety.py    red-flag screen, runs before any model
   privacy.py   notice injected into every surface; redaction for logs
 evals/         personas, checks, pass^k runner
-scripts/       demo_cli.py, run_evals.py
+scripts/       demo_cli.py, run_evals.py, a2a_peer_demo.py
 ```
