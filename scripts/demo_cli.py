@@ -53,7 +53,7 @@ def main() -> int:
         "--agent", action="store_true",
         help="run the whole agent (graph + reasoning) rather than scoring only",
     )
-    parser.add_argument("--backend", default="auto", choices=["auto", "jev", "fake"])
+    parser.add_argument("--backend", default="auto", choices=["auto", "jev", "openrouter", "fake"])
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 

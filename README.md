@@ -70,8 +70,11 @@ uv run python scripts/run_evals.py --k 15 --suite jev
 uv run pytest -q
 ```
 
-Set `TYPESAFE_API_KEY` for the real Jev model and `ANTHROPIC_API_KEY` for the
-real reasoner. Without them both fall back to offline stand-ins, so everything
+Set a Jev key and `ANTHROPIC_API_KEY` for the real reasoner. For Jev, either
+`TYPESAFE_API_KEY` (direct, console is invite-only) or `OPENROUTER_API_KEY`
+(via OpenRouter's Decisions API, model `typesafe/jev-latest`). Same model,
+same wire format, different transport — `--backend auto` prefers TypeSafe,
+falls back to OpenRouter, then to the offline fake. Without them both fall back to offline stand-ins, so everything
 stays runnable and testable with no credentials. The offline reasoner is not a
 mock that skips the interesting part: it emits real tool calls and consumes real
 `ToolMessage`s, so the reason ⇄ tools cycle is exercised either way.

@@ -2,10 +2,13 @@
 
 The whole Jev question set goes out in ONE call. Two implementations:
 
-``JevBackend``   the real thing, via ``langchain-typesafe``.
-``FakeBackend``  a seeded rule-based stand-in so the eval harness, the graph and
-                 both adapters run with no API key. It is deliberately noisy --
-                 a perfectly deterministic fake would make pass^k meaningless.
+``JevBackend``         the real thing, via ``langchain-typesafe``.
+``OpenRouterBackend``  the same model through OpenRouter's Decisions API, for
+                       when TypeSafe's own console is invite-only.
+``FakeBackend``        a seeded rule-based stand-in so the eval harness, the
+                       graph and both adapters run with no API key. Deliberately
+                       noisy -- a perfectly deterministic fake would make
+                       pass^k meaningless.
 """
 
 from __future__ import annotations
@@ -115,6 +118,126 @@ class JevBackend:
             answers=answers,
             model=response.model,
             request_id=response.request_id,
+        )
+
+
+# --------------------------------------------------------------------------
+# OpenRouter
+# --------------------------------------------------------------------------
+
+#: OpenRouter's published path. Secondary sources give the shorter form, so on
+#: a 404 we retry that once and remember whichever answered.
+_OPENROUTER_URLS = (
+    "https://openrouter.ai/api/v1/api/alpha/decisions",
+    "https://openrouter.ai/api/alpha/decisions",
+)
+
+
+def _questions_wire() -> dict[str, Any]:
+    """The question set as raw JSON, matching the Decisions wire format."""
+    questions: dict[str, Any] = {}
+    for c in (*CONDITIONS, DATA_SUFFICIENCY):
+        questions[c.key] = {"type": "noul", "instructions": c.instructions}
+    for f in FACTORS:
+        questions[f.key] = {
+            "type": "score",
+            "instructions": f.instructions,
+            "criteria": list(f.levels),
+        }
+    return questions
+
+
+class OpenRouterBackend:
+    """Jev via OpenRouter's Decisions API.
+
+    Same wire format as TypeSafe's /v1/systemone -- same question types, same
+    answer shapes -- so this is a transport swap, not a different model.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str = "typesafe/jev-latest",
+        timeout: float = 30.0,
+        url: str | None = None,
+    ) -> None:
+        self._api_key = os.getenv("OPENROUTER_API_KEY")
+        if not self._api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY is not set. Export it, or run with "
+                "--backend fake to use the offline stand-in."
+            )
+        self._model = model
+        self._timeout = timeout
+        override = url or os.getenv("OPENROUTER_DECISIONS_URL")
+        self._urls = (override,) if override else _OPENROUTER_URLS
+        self._url: str | None = None  # learned on first success
+        self._questions = _questions_wire()
+
+    @property
+    def name(self) -> str:
+        return f"openrouter:{self._model}"
+
+    @property
+    def noise_sigma(self) -> float:
+        # Same placeholder as JevBackend -- measure it before trusting pass^k.
+        return 0.01
+
+    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        import httpx
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        candidates = (self._url,) if self._url else self._urls
+        last_error: Exception | None = None
+
+        for url in candidates:
+            try:
+                response = httpx.post(
+                    url, headers=headers, json=payload, timeout=self._timeout
+                )
+            except Exception as exc:  # network failure -- try the next path
+                last_error = exc
+                continue
+            if response.status_code == 404 and len(candidates) > 1:
+                continue  # wrong path variant; try the other
+            response.raise_for_status()
+            self._url = url
+            return response.json()
+
+        raise RuntimeError(
+            f"OpenRouter Decisions API unreachable at {candidates}. "
+            f"Set OPENROUTER_DECISIONS_URL if the path has moved. "
+            f"Last error: {last_error}"
+        )
+
+    def classify(self, state: dict[str, Any]) -> RawResult:
+        body = self._post(
+            {"model": self._model, "state": state, "questions": self._questions}
+        )
+
+        answers: dict[str, RawAnswer] = {}
+        for key, answer in (body.get("answers") or {}).items():
+            kind = answer.get("type")
+            if kind == "noul":
+                answers[key] = RawAnswer(kind="noul", value=float(answer["noul"]))
+            elif kind == "score":
+                legend = answer.get("legend") or {}
+                nearest = str(int(round(answer["score"])))
+                answers[key] = RawAnswer(
+                    kind="score",
+                    value=float(answer["score"]),
+                    confidence=float(answer.get("confidence", 1.0)),
+                    max_level=max(len(legend) - 1, 1),
+                    level_label=str(legend.get(nearest, "")),
+                )
+
+        return RawResult(
+            answers=answers,
+            model=body.get("model", self._model),
+            request_id=body.get("id"),
         )
 
 
@@ -277,11 +400,18 @@ class FakeBackend:
 
 
 def get_backend(kind: str = "auto", *, seed: int | None = None) -> ScoringBackend:
-    """``auto`` uses Jev when a key is present, otherwise the offline fake."""
+    """``auto`` prefers a direct TypeSafe key, falls back to OpenRouter, then
+    to the offline fake. The first two are the same model."""
     if kind == "jev":
         return JevBackend()
+    if kind == "openrouter":
+        return OpenRouterBackend()
     if kind == "fake":
         return FakeBackend(seed=seed)
     if kind == "auto":
-        return JevBackend() if os.getenv("TYPESAFE_API_KEY") else FakeBackend(seed=seed)
+        if os.getenv("TYPESAFE_API_KEY"):
+            return JevBackend()
+        if os.getenv("OPENROUTER_API_KEY"):
+            return OpenRouterBackend()
+        return FakeBackend(seed=seed)
     raise ValueError(f"unknown backend: {kind!r}")

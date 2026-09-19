@@ -1,4 +1,5 @@
 from health_agent.domain.conditions import CONDITIONS, FACTORS
+import pytest
 from health_agent.domain.profile import HealthProfile, Sex, SmokingStatus
 from health_agent.scoring import FakeBackend, RiskScorer
 
@@ -87,3 +88,128 @@ def test_baseline_falls_with_age_and_is_higher_for_women():
     assert b(30, Sex.MALE) > b(50, Sex.MALE) > b(70, Sex.MALE) > b(90, Sex.MALE)
     assert b(40, Sex.FEMALE) > b(40, Sex.MALE)
     assert b(40, Sex.MALE) < b(40, None) < b(40, Sex.FEMALE)
+
+
+# --- OpenRouter transport ----------------------------------------------
+
+def _fake_openrouter_response(questions: dict) -> dict:
+    """A response in OpenRouter's documented Decisions shape."""
+    answers = {}
+    for key, q in questions.items():
+        if q["type"] == "noul":
+            answers[key] = {"type": "noul", "noul": 0.61}
+        else:
+            legend = {str(i): lvl for i, lvl in enumerate(q["criteria"])}
+            answers[key] = {
+                "type": "score", "score": 1.99, "confidence": 0.99,
+                "probabilities": {"0": 0.0, "1": 0.01, "2": 0.99},
+                "legend": legend,
+            }
+    return {
+        "id": "gen-abc123", "model": "typesafe/jev-1.13", "provider": "TypeSafe",
+        "answers": answers,
+        "usage": {"input_tokens": 312, "output_tokens": 48, "cost": 0.000013},
+    }
+
+
+def test_openrouter_backend_parses_the_documented_response(monkeypatch):
+    from health_agent.scoring.backend import OpenRouterBackend
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    backend = OpenRouterBackend()
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return _fake_openrouter_response(captured["json"]["questions"])
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update(url=url, headers=headers, json=json)
+        return FakeResponse()
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    result = backend.classify({"age": 54, "bmi": 30.9})
+
+    assert captured["headers"]["Authorization"] == "Bearer sk-or-test"
+    assert captured["json"]["model"] == "typesafe/jev-latest"
+    assert captured["json"]["state"] == {"age": 54, "bmi": 30.9}
+    assert len(captured["json"]["questions"]) == 15
+
+    assert result.request_id == "gen-abc123"
+    assert result.answers["t2d_10yr"].value == 0.61
+    smoking = result.answers["smoking_burden"]
+    assert smoking.kind == "score" and smoking.confidence == 0.99
+    assert smoking.max_level == 3
+    # score 1.99 rounds to level 2, which is the light-smoker band
+    assert smoking.level_label == "Current light smoker, under ten a day"
+
+
+def test_openrouter_backend_feeds_the_scorer(monkeypatch):
+    """A transport swap must produce the same RiskAssessment shape as Jev."""
+    from health_agent.scoring.backend import OpenRouterBackend
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    backend = OpenRouterBackend()
+
+    class FakeResponse:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return _fake_openrouter_response(backend._questions)
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: FakeResponse())
+
+    assessment = RiskScorer(backend).score(HealthProfile(age=54, sex=Sex.MALE))
+    assert len(assessment.conditions) == len(CONDITIONS)
+    assert len(assessment.factors) == len(FACTORS)
+    assert assessment.model == "typesafe/jev-1.13"
+
+
+def test_openrouter_falls_back_to_the_alternate_path_on_404(monkeypatch):
+    """The two published URL variants disagree; a 404 must retry, not fail."""
+    from health_agent.scoring.backend import OpenRouterBackend, _OPENROUTER_URLS
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    backend = OpenRouterBackend()
+    tried = []
+
+    class Resp:
+        def __init__(self, code): self.status_code = code
+        def raise_for_status(self): pass
+        def json(self): return _fake_openrouter_response(backend._questions)
+
+    def fake_post(url, **kw):
+        tried.append(url)
+        return Resp(404 if url == _OPENROUTER_URLS[0] else 200)
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    backend.classify({"age": 54})
+    assert tried == list(_OPENROUTER_URLS)
+    assert backend._url == _OPENROUTER_URLS[1], "should remember what worked"
+
+    backend.classify({"age": 55})
+    assert tried[-1] == _OPENROUTER_URLS[1], "should not re-probe once learned"
+
+
+def test_openrouter_requires_a_key(monkeypatch):
+    from health_agent.scoring.backend import OpenRouterBackend
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
+        OpenRouterBackend()
+
+
+def test_auto_prefers_typesafe_then_openrouter_then_fake(monkeypatch):
+    from health_agent.scoring.backend import get_backend
+
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert get_backend("auto", seed=1).name.startswith("fake")
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    assert get_backend("auto").name == "openrouter:typesafe/jev-latest"

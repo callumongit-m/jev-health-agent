@@ -16,7 +16,7 @@ def main() -> int:
     parser.add_argument(
         "--backend",
         default="auto",
-        choices=["auto", "jev", "fake"],
+        choices=["auto", "jev", "openrouter", "fake"],
         help="auto uses Jev when TYPESAFE_API_KEY is set, else the offline fake",
     )
     parser.add_argument("--seed", type=int, default=None)
