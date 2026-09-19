@@ -101,70 +101,27 @@ def assess_health(
 
 
 @server.tool(
-    name="import_apple_health",
-    title="Import an Apple Health export",
+    name="start_health_sync",
+    title="Connect Apple Health",
     description=(
-        "Read a person's Apple Health export and turn it into a health "
-        "profile, so they do not have to type their numbers in by hand. "
-        "Ask them for the path to their export (export.zip or export.xml) "
-        "and pass it here, then feed the returned fields to `assess_health`. "
-        "\n\nTo produce one: iPhone Health app, tap the profile picture, "
-        "Export All Health Data. Apple Health already aggregates Oura, Whoop, "
-        "Garmin, Fitbit and Apple Watch, so one export covers all of them."
-        "\n\nIMPORTANT: this reads a file from the machine running this "
-        "server. It works when the server runs locally (stdio transport). "
-        "On a remote deployment there is no access to the person's disk -- "
-        "the returned error says so, and they should run the CLI locally "
-        "instead and paste the summary.\n\n" + NOTICE
+        "Set up an automatic feed of the person's Apple Health data, so their "
+        "assessment stays current instead of going stale. Returns a private "
+        "URL and token plus setup steps to read out to them.\n\n"
+        "Apple Health already aggregates Apple Watch, Oura, Whoop, Garmin and "
+        "Fitbit, so this one connection covers all of them. Use it whenever "
+        "someone mentions a wearable, a watch, or not wanting to type numbers "
+        "in.\n\n"
+        "Note: this agent runs on a server and cannot read files from the "
+        "person's phone or computer. The link is how their data reaches it."
+        "\n\n" + NOTICE
     ),
 )
-def import_apple_health(
-    path: Annotated[str, Field(description="path to export.zip or export.xml")],
+def start_health_sync(
+    thread_id: Annotated[str | None, Field(None, description="reuse to keep one assessment updated")] = None,
 ) -> dict[str, Any]:
-    from pathlib import Path as _Path
+    from health_agent.adapters.sync_store import create_sync
 
-    from health_agent.ingest.apple_health import parse_export
-
-    target = _Path(path).expanduser()
-    if not target.exists():
-        return _privacy_footer(
-            {
-                "imported": False,
-                "error": f"no file at {target}",
-                "hint": "If this agent is running remotely it cannot see the "
-                        "person's files. Ask them to run "
-                        "`python scripts/demo_cli.py --apple-health <path>` "
-                        "locally and paste the resulting fields instead.",
-            }
-        )
-    try:
-        fields, provenance = parse_export(target)
-    except Exception as exc:
-        return _privacy_footer(
-            {"imported": False, "error": f"{type(exc).__name__}: {exc}"}
-        )
-
-    if not fields:
-        return _privacy_footer(
-            {
-                "imported": False,
-                "error": "no usable records in the last 28 days",
-                "hint": "The export may be old, or the person may not have "
-                        "been recording. Ask for their details directly.",
-            }
-        )
-
-    return _privacy_footer(
-        {
-            "imported": True,
-            "fields": fields,
-            "observed": {k: v.observed_at.date().isoformat()
-                         for k, v in provenance.items()},
-            "next_step": "Pass these fields to assess_health. Apple Health "
-                         "rarely carries age or sex, and both change the "
-                         "baseline materially -- ask the person for those.",
-        }
-    )
+    return _privacy_footer(create_sync(thread_id=thread_id))
 
 
 @server.tool(

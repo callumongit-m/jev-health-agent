@@ -30,7 +30,7 @@ async def test_mcp_exposes_the_expected_tools():
 
     names = {t.name for t in await server.list_tools()}
     assert names == {
-        "assess_health", "import_apple_health", "connect_wearable",
+        "assess_health", "start_health_sync", "connect_wearable",
         "set_health_reminder", "delete_my_data",
     }
 
@@ -193,53 +193,34 @@ def test_unknown_thread_is_not_silently_created(webhook_client):
     assert result["updated"] is False
 
 
-# --- Apple Health import over MCP --------------------------------------
+# --- Health sync link over MCP -----------------------------------------
 
 @pytest.mark.asyncio
-async def test_apple_health_import_tool(tmp_path):
-    from datetime import datetime, timedelta, timezone
-
+async def test_start_health_sync_returns_a_usable_link():
     from health_agent.adapters.mcp_server import server
 
-    now = datetime.now(timezone.utc)
-    stamp = (now - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S %z")
-    xml = (
-        '<?xml version="1.0"?><HealthData>'
-        f'<Record type="HKQuantityTypeIdentifierBodyMass" unit="kg" value="88.2" '
-        f'startDate="{stamp}" endDate="{stamp}"/>'
-        f'<Record type="HKQuantityTypeIdentifierRestingHeartRate" unit="count/min" '
-        f'value="71" startDate="{stamp}" endDate="{stamp}"/>'
-        "</HealthData>"
-    )
-    export = tmp_path / "export.xml"
-    export.write_text(xml)
-
-    payload = _unwrap(await server.call_tool("import_apple_health", {"path": str(export)}))
-    assert payload["imported"] is True
-    assert payload["fields"]["weight_kg"] == 88.2
-    assert payload["fields"]["resting_hr"] == 71
+    payload = _unwrap(await server.call_tool("start_health_sync", {}))
+    assert payload["sync_url"].endswith("/ingest/apple-health")
+    assert len(payload["token"]) >= 24, "token must not be guessable"
+    assert payload["thread_id"]
+    assert "Health Auto Export" in payload["setup"]["recommended"]
+    assert "Export All Health Data" in payload["setup"]["one_off_alternative"]
     assert NOTICE in payload["privacy"]
-    assert "age or sex" in payload["next_step"], "must prompt for the baseline inputs"
 
 
 @pytest.mark.asyncio
-async def test_apple_health_import_explains_the_remote_case(tmp_path):
-    """A hosted server cannot read the person's disk; say so usefully."""
+async def test_sync_tokens_are_unique_per_call():
     from health_agent.adapters.mcp_server import server
 
-    payload = _unwrap(
-        await server.call_tool("import_apple_health", {"path": str(tmp_path / "nope.zip")})
-    )
-    assert payload["imported"] is False
-    assert "running remotely" in payload["hint"]
+    first = _unwrap(await server.call_tool("start_health_sync", {}))
+    second = _unwrap(await server.call_tool("start_health_sync", {}))
+    assert first["token"] != second["token"]
+    assert first["thread_id"] != second["thread_id"]
 
 
 @pytest.mark.asyncio
-async def test_apple_health_import_handles_an_empty_export(tmp_path):
+async def test_sync_reuses_a_thread_when_given_one():
     from health_agent.adapters.mcp_server import server
 
-    export = tmp_path / "export.xml"
-    export.write_text('<?xml version="1.0"?><HealthData></HealthData>')
-    payload = _unwrap(await server.call_tool("import_apple_health", {"path": str(export)}))
-    assert payload["imported"] is False
-    assert "no usable records" in payload["error"]
+    payload = _unwrap(await server.call_tool("start_health_sync", {"thread_id": "t-42"}))
+    assert payload["thread_id"] == "t-42"

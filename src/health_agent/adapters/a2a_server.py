@@ -197,8 +197,10 @@ def build_app(base_url: str = "http://localhost:9000"):
     app = FastAPI(title="Health Risk Agent (A2A)")
 
     # Wearable updates arrive here and resume the existing thread.
+    from health_agent.adapters.health_ingest import router as health_router
     from health_agent.adapters.webhook import router as webhook_router
 
+    app.include_router(health_router)
     app.include_router(webhook_router)
 
     add_a2a_routes_to_fastapi(
