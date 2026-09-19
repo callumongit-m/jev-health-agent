@@ -39,8 +39,8 @@ one call. The reasoning LLM runs only after, and only on what Jev found.
 | Phase | | |
 |---|---|---|
 | 1 | Domain, Jev scoring, eval harness | **done** |
-| 2 | LangGraph loop, tools, actuarial calculator | next |
-| 3 | MCP adapter | |
+| 2 | LangGraph loop, tools, actuarial calculator, red-flag safety | **done** |
+| 3 | MCP adapter | next |
 | 4 | A2A adapter | |
 | 5 | Terra ingest (Apple Health + wearables) | |
 
@@ -53,13 +53,57 @@ export PYTHONPATH=.
 # score a persona (falls back to the offline backend with no API key)
 uv run python scripts/demo_cli.py --persona heavy_smoker_cvd
 
+# run the whole agent: graph, tool cycle, life expectancy, recommendations
+uv run python scripts/demo_cli.py --persona heavy_smoker_cvd --agent
+
+# the paths that matter
+uv run python scripts/demo_cli.py --persona mid_metabolic_risk --agent \
+    --text "I get chest tightness on stairs"        # -> seek_care
+uv run python scripts/demo_cli.py --json '{"age": 41}' --agent   # -> needs_input
+
 # the eval suite
 uv run python scripts/run_evals.py --k 15 --suite jev
 uv run pytest -q
 ```
 
-Set `TYPESAFE_API_KEY` to use the real Jev model; without it the scorer uses a
-seeded rule-based stand-in so everything above it stays testable offline.
+Set `TYPESAFE_API_KEY` for the real Jev model and `ANTHROPIC_API_KEY` for the
+real reasoner. Without them both fall back to offline stand-ins, so everything
+stays runnable and testable with no credentials. The offline reasoner is not a
+mock that skips the interesting part: it emits real tool calls and consumes real
+`ToolMessage`s, so the reason ⇄ tools cycle is exercised either way.
+
+## The graph
+
+```
+ingest -> screen --(red flag)--> END                 status: seek_care
+             |
+          (clear)
+             v
+         classify  (Jev, one batched call, no LLM)
+             |
+           gate --(thin data)--> clarify -> END      status: needs_input
+             |
+           (ok)
+             v
+          reason <----------+
+             |  |           |
+             |  +-> tools --+   actuarial_calc / evidence search / reminders
+             v
+          respond -> END                             status: complete
+```
+
+Three things worth pointing at:
+
+- **The gate is the point of using Jev.** A cheap calibrated sufficiency signal
+  decides whether to spend an LLM call at all. Below threshold the agent returns
+  targeted questions to the *calling agent* rather than guessing.
+- **Red flags run before any model.** Scoring someone describing chest pain would
+  be the worst failure this system could have, so `safety.py` short-circuits the
+  graph on acute presentations. Deliberately over-inclusive.
+- **Life expectancy comes from a tool, not from prose.** The LLM chooses and
+  explains; `actuarial_calc` does the arithmetic, so the same profile always
+  yields the same number. Factor costs are confidence-weighted (missing data
+  must not deduct years) and saturated (overlapping risks do not add up).
 
 ## Evals: pass^k, not pass@k
 

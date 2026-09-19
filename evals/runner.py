@@ -101,6 +101,38 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
 
         built.append(("privacy_surfaces", "jev", C.check_privacy_surfaces()))
 
+    if suite in ("graph", "all"):
+        sparse = {p.id for p in personas.values() if "sparse" in p.tags}
+        for persona in personas.values():
+            is_sparse = persona.id in sparse
+            built.append(
+                (f"gate[{persona.id}]", "graph", C.check_gate(persona, expect_input=is_sparse))
+            )
+            built.append(
+                (f"privacy_payload[{persona.id}]", "graph", C.check_privacy_in_payload(persona))
+            )
+            if is_sparse:
+                continue
+            built.append(
+                (f"le_stability[{persona.id}]", "graph",
+                 C.check_life_expectancy_stability(persona))
+            )
+            built.append(
+                (f"rec_grounding[{persona.id}]", "graph",
+                 C.check_recommendations_grounded(persona))
+            )
+
+        scorable = next(p for p in personas.values() if "complete" in p.tags)
+        for text in C.ACUTE_TEXTS:
+            built.append(
+                (f"red_flag[{text[:32]}]", "graph", C.check_red_flag(scorable, text))
+            )
+        for text in C.BENIGN_TEXTS:
+            built.append(
+                (f"no_false_flag[{text[:32]}]", "graph",
+                 C.check_not_red_flag(scorable, text))
+            )
+
     return built
 
 

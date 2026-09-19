@@ -48,6 +48,11 @@ def main() -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--persona", help="id from evals/cases/personas.yaml")
     source.add_argument("--json", help="a HealthProfile as JSON")
+    parser.add_argument("--text", help="free text the person also said")
+    parser.add_argument(
+        "--agent", action="store_true",
+        help="run the whole agent (graph + reasoning) rather than scoring only",
+    )
     parser.add_argument("--backend", default="auto", choices=["auto", "jev", "fake"])
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
@@ -64,8 +69,43 @@ def main() -> int:
         profile = HealthProfile(**json.loads(args.json))
 
     scorer = RiskScorer(get_backend(args.backend, seed=args.seed))
-    print(render(scorer.score(profile)))
-    print("\n" + DISCLAIMER + "\n" + NOTICE)
+
+    if not args.agent:
+        print(render(scorer.score(profile)))
+        print("\n" + DISCLAIMER + "\n" + NOTICE)
+        return 0
+
+    from health_agent.adapters.core import assess
+    from health_agent.graph.reasoner import reasoner_name
+
+    out = assess(profile, raw_text=args.text, scorer=scorer)
+    print(f"status   {out['status']}   (reasoner: {reasoner_name()})")
+    print()
+
+    if out["status"] == "seek_care":
+        print("RED FLAGS:", ", ".join(out["red_flags"]))
+        print()
+        print(out["answer"])
+    elif out["status"] == "needs_input":
+        print(out["answer"])
+        for q in out["questions"]:
+            print(f"  - {q}")
+    else:
+        print(render(scorer.score(profile)))
+        le = out.get("life_expectancy")
+        if le:
+            print()
+            print("LIFE EXPECTANCY")
+            print(f"  baseline for age/sex  {le['baseline_remaining_years']:.1f} years")
+            print(f"  adjusted estimate     {le['adjusted_remaining_years']:.1f} years")
+            print(f"  age at death approx   {le['estimated_age_at_death']:.1f}")
+            print(f"  recoverable           {le['years_recoverable']:.1f} years")
+        print()
+        print("AGENT")
+        for line in (out["answer"] or "").splitlines():
+            print("  " + line)
+
+    print("\n" + out["disclaimer"] + "\n" + out["privacy"])
     return 0
 
 

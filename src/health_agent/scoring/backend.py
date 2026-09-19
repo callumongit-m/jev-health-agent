@@ -220,8 +220,12 @@ class FakeBackend:
             + 0.10 * glucose + fam("heart", "cardiac", "stroke"),
             "hypertension": 0.65 * bp + 0.18 * adiposity + 0.12 * drink
             + 0.10 * age_risk,
-            "metabolic_syndrome": 0.40 * adiposity + 0.30 * lipids + 0.20 * glucose
-            + 0.15 * bp,
+            # Metabolic syndrome is three-of-five criteria: central adiposity,
+            # raised triglycerides, low HDL, raised BP, raised fasting glucose.
+            # Lipids therefore cover two of the five and must weigh accordingly;
+            # under-weighting them made the scorer insensitive to triglycerides.
+            "metabolic_syndrome": 0.40 * lipids + 0.22 * adiposity
+            + 0.20 * glucose + 0.20 * bp,
             "sleep_apnoea": 0.55 * adiposity + 0.25 * poor_sleep + 0.10 * age_risk,
             "nafld": 0.45 * adiposity + 0.25 * liver + 0.20 * drink + 0.15 * glucose,
             "ckd": 0.55 * kidney + 0.25 * bp + 0.20 * glucose,
@@ -237,23 +241,34 @@ class FakeBackend:
             kind="noul", value=self._jitter(_ramp(known, 4.0, 14.0))
         )
 
-        raw_factors = {
-            "smoking_burden": smoke,
-            "adiposity": adiposity,
-            "activity_deficit": inactivity,
-            "sleep_debt": poor_sleep,
-            "alcohol_burden": drink,
-            "diet_quality": diet,
-            "stress_load": stress,
+        # (severity, is there actually evidence for this factor?)
+        raw_factors: dict[str, tuple[float, bool]] = {
+            "smoking_burden": (smoke, smoking is not None),
+            "adiposity": (adiposity, bmi is not None),
+            "activity_deficit": (
+                inactivity, activity is not None or g("steps_daily_avg") is not None
+            ),
+            "sleep_debt": (poor_sleep, sleep_h is not None or sleep_eff is not None),
+            "alcohol_burden": (drink, alcohol is not None),
+            "diet_quality": (diet, g("diet_quality_self_rating") is not None),
+            "stress_load": (stress, g("perceived_stress_rating") is not None),
         }
         for spec in FACTORS:
-            severity = _clamp(self._jitter(raw_factors.get(spec.key, 0.0)))
+            severity, has_evidence = raw_factors.get(spec.key, (0.0, False))
+            if not has_evidence:
+                # No evidence must mean low confidence, not a confident guess.
+                # Anything downstream that weights by confidence then stops
+                # treating an absent field as a finding.
+                severity, confidence = 0.4, 0.2
+            else:
+                confidence = round(0.55 + 0.4 * abs(severity - 0.5) * 2, 3)
+            severity = _clamp(self._jitter(severity))
             max_level = len(spec.levels) - 1
             position = severity * max_level
             answers[spec.key] = RawAnswer(
                 kind="score",
                 value=position,
-                confidence=round(0.55 + 0.4 * abs(severity - 0.5) * 2, 3),
+                confidence=confidence,
                 max_level=max_level,
                 level_label=spec.levels[int(round(position))],
             )
