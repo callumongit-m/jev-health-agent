@@ -1,0 +1,7 @@
+# [higher_persona, lower_persona, condition_key]
+# The first persona must rank strictly higher on that condition.
+- [mid_metabolic_risk, lean_young_healthy, t2d_10yr]
+- [heavy_smoker_cvd, athletic_older, cvd_10yr]
+- [elderly_renal, lean_young_healthy, ckd]
+- [mid_metabolic_risk, athletic_older, metabolic_syndrome]
+- [heavy_smoker_cvd, lean_young_healthy, hypertension]

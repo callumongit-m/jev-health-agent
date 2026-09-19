@@ -1,0 +1,171 @@
+# Synthetic personas. No real person's data appears in this repo.
+# `expect` entries are properties, never exact values -- the agent is stochastic.
+
+- id: lean_young_healthy
+  tags: [healthy, complete]
+  profile:
+    age: 27
+    sex: female
+    height_cm: 168
+    weight_kg: 60
+    systolic_bp: 112
+    diastolic_bp: 70
+    resting_hr: 56
+    hrv_ms: 78
+    hba1c_mmol_mol: 32
+    fasting_glucose_mmol_l: 4.8
+    total_cholesterol_mmol_l: 4.1
+    hdl_mmol_l: 1.8
+    ldl_mmol_l: 2.0
+    triglycerides_mmol_l: 0.8
+    egfr: 105
+    alt_u_l: 18
+    smoking_status: never
+    alcohol_units_per_week: 4
+    moderate_activity_minutes_per_week: 280
+    steps_daily_avg: 11000
+    sleep_hours_avg: 8.0
+    sleep_efficiency_pct: 93
+    diet_quality_self_rating: 5
+    perceived_stress_rating: 2
+  expect:
+    data_sufficiency_min: 0.6
+    conditions_below:
+      t2d_10yr: 0.20
+      cvd_10yr: 0.20
+      metabolic_syndrome: 0.20
+
+- id: mid_metabolic_risk
+  tags: [at_risk, complete]
+  profile:
+    age: 54
+    sex: male
+    height_cm: 178
+    weight_kg: 98
+    systolic_bp: 148
+    diastolic_bp: 92
+    resting_hr: 78
+    hba1c_mmol_mol: 46
+    fasting_glucose_mmol_l: 6.3
+    total_cholesterol_mmol_l: 6.1
+    hdl_mmol_l: 0.9
+    ldl_mmol_l: 4.2
+    triglycerides_mmol_l: 2.9
+    egfr: 82
+    alt_u_l: 58
+    smoking_status: former
+    alcohol_units_per_week: 22
+    moderate_activity_minutes_per_week: 40
+    steps_daily_avg: 3800
+    sleep_hours_avg: 5.8
+    sleep_efficiency_pct: 76
+    diet_quality_self_rating: 2
+    perceived_stress_rating: 4
+    family_history: [type 2 diabetes]
+  expect:
+    data_sufficiency_min: 0.6
+    conditions_above:
+      t2d_10yr: 0.35
+      metabolic_syndrome: 0.35
+    top_factor_in: [adiposity, activity_deficit, diet_quality, sleep_debt]
+
+- id: heavy_smoker_cvd
+  tags: [at_risk, complete]
+  profile:
+    age: 62
+    sex: male
+    height_cm: 175
+    weight_kg: 86
+    systolic_bp: 158
+    diastolic_bp: 96
+    resting_hr: 84
+    hba1c_mmol_mol: 41
+    total_cholesterol_mmol_l: 6.8
+    hdl_mmol_l: 0.85
+    ldl_mmol_l: 4.9
+    triglycerides_mmol_l: 2.4
+    egfr: 74
+    alt_u_l: 33
+    smoking_status: current
+    cigarettes_per_day: 25
+    years_smoked: 40
+    alcohol_units_per_week: 30
+    moderate_activity_minutes_per_week: 20
+    sleep_hours_avg: 6.0
+    diet_quality_self_rating: 2
+    perceived_stress_rating: 4
+    family_history: [heart disease]
+  expect:
+    data_sufficiency_min: 0.6
+    conditions_above:
+      cvd_10yr: 0.45
+    top_factor_in: [smoking_burden]
+
+- id: athletic_older
+  tags: [healthy, complete]
+  profile:
+    age: 66
+    sex: female
+    height_cm: 165
+    weight_kg: 58
+    systolic_bp: 118
+    diastolic_bp: 74
+    resting_hr: 52
+    hrv_ms: 62
+    hba1c_mmol_mol: 35
+    fasting_glucose_mmol_l: 5.0
+    total_cholesterol_mmol_l: 4.6
+    hdl_mmol_l: 2.1
+    ldl_mmol_l: 2.2
+    triglycerides_mmol_l: 0.9
+    egfr: 88
+    alt_u_l: 20
+    smoking_status: never
+    alcohol_units_per_week: 2
+    moderate_activity_minutes_per_week: 320
+    steps_daily_avg: 12500
+    sleep_hours_avg: 7.6
+    sleep_efficiency_pct: 90
+    diet_quality_self_rating: 5
+    perceived_stress_rating: 1
+  expect:
+    data_sufficiency_min: 0.6
+    conditions_below:
+      t2d_10yr: 0.25
+      metabolic_syndrome: 0.25
+
+- id: elderly_renal
+  tags: [at_risk, complete]
+  profile:
+    age: 74
+    sex: male
+    height_cm: 172
+    weight_kg: 79
+    systolic_bp: 162
+    diastolic_bp: 88
+    hba1c_mmol_mol: 52
+    fasting_glucose_mmol_l: 7.1
+    egfr: 48
+    alt_u_l: 26
+    total_cholesterol_mmol_l: 5.4
+    hdl_mmol_l: 1.1
+    ldl_mmol_l: 3.4
+    triglycerides_mmol_l: 1.9
+    smoking_status: former
+    alcohol_units_per_week: 6
+    moderate_activity_minutes_per_week: 60
+    sleep_hours_avg: 6.5
+    diet_quality_self_rating: 3
+    perceived_stress_rating: 3
+  expect:
+    data_sufficiency_min: 0.6
+    conditions_above:
+      ckd: 0.35
+
+- id: sparse_minimal
+  tags: [sparse]
+  profile:
+    age: 41
+    sex: female
+  expect:
+    data_sufficiency_max: 0.5

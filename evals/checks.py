@@ -1,0 +1,327 @@
+"""Eval checks.
+
+Each check is a callable returning ``CheckResult``. Checks assert *properties*,
+never exact values -- the system is stochastic by design. Monotonicity checks
+are generated from the condition registry, so they grow as conditions are added.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable
+
+from health_agent.domain.conditions import CONDITIONS
+from health_agent.domain.profile import HealthProfile
+from health_agent.domain.results import RiskAssessment
+from health_agent.scoring.scorer import RiskScorer
+
+from evals.cases_loader import Persona
+
+
+@dataclass(frozen=True, slots=True)
+class CheckResult:
+    passed: bool
+    detail: str = ""
+
+
+CheckFn = Callable[[RiskScorer], CheckResult]
+
+
+# --------------------------------------------------------------------------
+# Per-persona checks
+# --------------------------------------------------------------------------
+
+def check_schema_valid(persona: Persona) -> CheckFn:
+    def run(scorer: RiskScorer) -> CheckResult:
+        assessment = scorer.score(persona.profile)
+        RiskAssessment.model_validate(assessment.model_dump())
+        n_expected = len(CONDITIONS)
+        if len(assessment.conditions) != n_expected:
+            return CheckResult(
+                False, f"expected {n_expected} conditions, got {len(assessment.conditions)}"
+            )
+        return CheckResult(True)
+
+    return run
+
+
+def check_expectations(persona: Persona) -> CheckFn:
+    """Asserts the ``expect`` block declared on the persona."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        a = scorer.score(persona.profile)
+        exp = persona.expect
+        failures: list[str] = []
+
+        lo = exp.get("data_sufficiency_min")
+        if lo is not None and a.data_sufficiency < lo:
+            failures.append(f"sufficiency {a.data_sufficiency:.2f} < {lo}")
+
+        hi = exp.get("data_sufficiency_max")
+        if hi is not None and a.data_sufficiency > hi:
+            failures.append(f"sufficiency {a.data_sufficiency:.2f} > {hi}")
+
+        for key, threshold in (exp.get("conditions_above") or {}).items():
+            p = a.condition(key).probability
+            if p <= threshold:
+                failures.append(f"{key} {p:.2f} not > {threshold}")
+
+        for key, threshold in (exp.get("conditions_below") or {}).items():
+            p = a.condition(key).probability
+            if p >= threshold:
+                failures.append(f"{key} {p:.2f} not < {threshold}")
+
+        allowed = exp.get("top_factor_in")
+        if allowed:
+            top = a.top_factors(1)[0].key
+            if top not in allowed:
+                failures.append(f"top factor {top!r} not in {allowed}")
+
+        return CheckResult(not failures, "; ".join(failures))
+
+    return run
+
+
+# --------------------------------------------------------------------------
+# Monotonicity -- generated from the registry
+# --------------------------------------------------------------------------
+
+#: How far to push a field when testing monotonicity.
+_NUDGE: dict[str, float] = {
+    "hba1c_mmol_mol": 12.0,
+    "fasting_glucose_mmol_l": 1.5,
+    "weight_kg": 18.0,
+    "systolic_bp": 20.0,
+    "ldl_mmol_l": 1.5,
+    "hdl_mmol_l": 0.5,
+    "triglycerides_mmol_l": 1.2,
+    "cigarettes_per_day": 15.0,
+    "alcohol_units_per_week": 18.0,
+    "moderate_activity_minutes_per_week": 120.0,
+    "alt_u_l": 35.0,
+    "egfr": 30.0,
+    "sleep_efficiency_pct": 18.0,
+}
+
+#: Sensitivity floor: a drop smaller than this is never worth flagging.
+MIN_TOLERANCE = 0.02
+
+
+def _tolerance(scorer: RiskScorer) -> float:
+    """A monotonicity check compares two independent scoring calls, so the
+    difference carries sqrt(2) times the backend's per-call noise. Flag only
+    drops beyond 3 sigma of that, otherwise the check is measuring jitter."""
+    sigma = getattr(scorer.backend, "noise_sigma", 0.0) or 0.0
+    return max(MIN_TOLERANCE, 3.0 * sigma * 2.0**0.5)
+
+
+def _bounds(field_name: str) -> tuple[float | None, float | None, bool]:
+    """(ge, le, is_int) declared on the HealthProfile field."""
+    info = HealthProfile.model_fields[field_name]
+    ge = le = None
+    for meta in info.metadata:
+        ge = getattr(meta, "ge", None) if ge is None else ge
+        le = getattr(meta, "le", None) if le is None else le
+    annotation = str(info.annotation)
+    return ge, le, "int" in annotation and "float" not in annotation
+
+
+def _nudged(profile: HealthProfile, field_name: str, direction: str) -> HealthProfile | None:
+    """A copy of the profile with one field pushed toward worse, clamped to the
+    field's declared bounds and coerced back to its declared type."""
+    current = getattr(profile, field_name, None)
+    step = _NUDGE.get(field_name)
+    if current is None or step is None:
+        return None
+
+    new = current + step if direction == "increase" else current - step
+    ge, le, is_int = _bounds(field_name)
+    if ge is not None:
+        new = max(new, ge)
+    if le is not None:
+        new = min(new, le)
+    if is_int:
+        new = int(round(new))
+
+    if new == current:  # already pinned at the bound -- nothing to test
+        return None
+    try:
+        return HealthProfile(**(profile.model_dump(exclude={"bmi"}) | {field_name: new}))
+    except Exception:
+        return None
+
+
+#: Fields whose worsening must move the needle, not merely fail to lower it.
+#: Monotonicity alone cannot catch a model that ignores an input entirely --
+#: an ignored field produces no drop, so the check passes. Sensitivity does.
+SENSITIVE_DRIVERS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("t2d_10yr", "hba1c_mmol_mol"),
+        ("cvd_10yr", "cigarettes_per_day"),
+        ("cvd_10yr", "systolic_bp"),
+        ("hypertension", "systolic_bp"),
+        ("metabolic_syndrome", "triglycerides_mmol_l"),
+        ("ckd", "egfr"),
+        ("nafld", "alt_u_l"),
+    }
+)
+
+#: Above this the condition is near-certain and has no headroom to rise.
+SATURATION = 0.85
+
+#: Minimum rise that counts as the model actually responding to a driver.
+#: This is an effect size, not a noise floor -- a driver pushed from healthy
+#: to severe should move a probability visibly.
+MIN_EFFECT = 0.07
+
+#: Monotonicity and sensitivity both average this many calls at each end. Averaging n samples cuts
+#: the noise by sqrt(n), which is what lets a real ~0.10 effect be separated
+#: from jitter instead of being lost in it.
+SAMPLES = 3
+
+
+def _mean_probability(
+    scorer: RiskScorer, profile: HealthProfile, key: str, n: int
+) -> float:
+    return sum(scorer.score(profile).condition(key).probability for _ in range(n)) / n
+
+#: (healthy, severe) values per field. Sensitivity pins the field to each end
+#: rather than nudging it: a small nudge cannot be distinguished from noise,
+#: so it tests nothing. Pinning gives a large, unambiguous effect size.
+_EXTREMES: dict[str, tuple[float, float]] = {
+    "hba1c_mmol_mol": (32.0, 75.0),
+    "fasting_glucose_mmol_l": (4.8, 9.5),
+    "systolic_bp": (112.0, 185.0),
+    "ldl_mmol_l": (2.0, 6.0),
+    "triglycerides_mmol_l": (0.8, 5.0),
+    "hdl_mmol_l": (2.1, 0.7),
+    "cigarettes_per_day": (0.0, 40.0),
+    "egfr": (105.0, 28.0),
+    "alt_u_l": (18.0, 120.0),
+    "weight_kg": (62.0, 130.0),
+    "alcohol_units_per_week": (2.0, 50.0),
+    "moderate_activity_minutes_per_week": (300.0, 0.0),
+}
+
+
+def _pinned(profile: HealthProfile, field_name: str, value: float) -> HealthProfile | None:
+    ge, le, is_int = _bounds(field_name)
+    if ge is not None:
+        value = max(value, ge)
+    if le is not None:
+        value = min(value, le)
+    coerced = int(round(value)) if is_int else value
+    try:
+        return HealthProfile(
+            **(profile.model_dump(exclude={"bmi"}) | {field_name: coerced})
+        )
+    except Exception:
+        return None
+
+
+def sensitivity_checks(persona: Persona) -> dict[str, CheckFn]:
+    """Driving a primary marker from healthy to severe must move the
+    probability materially. Monotonicity cannot catch an ignored input --
+    an ignored field produces no drop, so it passes. This catches it."""
+    checks: dict[str, CheckFn] = {}
+    for spec in CONDITIONS:
+        for field_name, _direction in spec.worsens_with.items():
+            if (spec.key, field_name) not in SENSITIVE_DRIVERS:
+                continue
+            extremes = _EXTREMES.get(field_name)
+            if extremes is None or getattr(persona.profile, field_name, None) is None:
+                continue
+            healthy = _pinned(persona.profile, field_name, extremes[0])
+            worse = _pinned(persona.profile, field_name, extremes[1])
+            if healthy is None or worse is None:
+                continue
+
+            def run(
+                scorer: RiskScorer, *, key=spec.key, healthy=healthy, worse=worse
+            ) -> CheckResult:
+                n = SAMPLES
+                low = _mean_probability(scorer, healthy, key, n)
+                if low > SATURATION:
+                    return CheckResult(True, "skipped: saturated by other factors")
+                high = _mean_probability(scorer, worse, key, n)
+                # averaging n samples at each end shrinks the noise floor by sqrt(n)
+                threshold = max(MIN_EFFECT, _tolerance(scorer) / n**0.5)
+                if high - low < threshold:
+                    return CheckResult(
+                        False,
+                        f"healthy {low:.3f} -> severe {high:.3f} "
+                        f"(moved {high - low:+.3f}, needs >{threshold:.3f})",
+                    )
+                return CheckResult(True)
+
+            checks[f"sensitivity[{spec.key}/{field_name}]"] = run
+    return checks
+
+
+def monotonicity_checks(persona: Persona) -> dict[str, CheckFn]:
+    """One check per (condition, field) pair that this persona can exercise."""
+    checks: dict[str, CheckFn] = {}
+    for spec in CONDITIONS:
+        for field_name, direction in spec.worsens_with.items():
+            worse = _nudged(persona.profile, field_name, direction)
+            if worse is None:
+                continue
+
+            def run(scorer: RiskScorer, *, key=spec.key, worse=worse) -> CheckResult:
+                n = SAMPLES
+                base = _mean_probability(scorer, persona.profile, key, n)
+                bumped = _mean_probability(scorer, worse, key, n)
+                # averaging shrinks the noise floor by sqrt(n), so a saturated
+                # input (true delta zero) stops tripping this on jitter alone
+                tolerance = _tolerance(scorer) / n**0.5
+                if bumped + tolerance < base:
+                    return CheckResult(
+                        False,
+                        f"{base:.3f} -> {bumped:.3f} "
+                        f"(fell {base - bumped:.3f}, tolerance {tolerance:.3f})",
+                    )
+                return CheckResult(True)
+
+            checks[f"monotonicity[{spec.key}/{field_name}]"] = run
+    return checks
+
+
+# --------------------------------------------------------------------------
+# Ordering
+# --------------------------------------------------------------------------
+
+def ordering_check(
+    higher: Persona, lower: Persona, condition_key: str
+) -> CheckFn:
+    def run(scorer: RiskScorer) -> CheckResult:
+        hi = scorer.score(higher.profile).condition(condition_key).probability
+        lo = scorer.score(lower.profile).condition(condition_key).probability
+        if hi <= lo:
+            return CheckResult(
+                False, f"{higher.id} {hi:.3f} not > {lower.id} {lo:.3f}"
+            )
+        return CheckResult(True)
+
+    return run
+
+
+# --------------------------------------------------------------------------
+# Privacy
+# --------------------------------------------------------------------------
+
+def check_privacy_surfaces() -> CheckFn:
+    def run(_: RiskScorer) -> CheckResult:
+        from health_agent.privacy import NOTICE, SENSITIVE_FIELDS, redact
+
+        if "NOT used to train" not in NOTICE:
+            return CheckResult(False, "notice missing the no-training statement")
+        leaked = redact({"age": 54, "hba1c_mmol_mol": 46.0, "thread_id": "abc"})
+        if leaked["age"] == 54 or leaked["hba1c_mmol_mol"] == 46.0:
+            return CheckResult(False, f"redact leaked values: {leaked}")
+        if leaked["thread_id"] != "abc":
+            return CheckResult(False, "redact scrubbed a non-sensitive field")
+        if "age" not in SENSITIVE_FIELDS:
+            return CheckResult(False, "age missing from SENSITIVE_FIELDS")
+        return CheckResult(True)
+
+    return run
