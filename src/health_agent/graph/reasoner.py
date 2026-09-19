@@ -31,6 +31,10 @@ what a guideline currently recommends, or how much a given change is shown to \
 help. Cite what you find. If you did not search, say the figure is approximate \
 rather than implying a source you did not check.
 - Only call `set_health_reminder` if the person asked to be reminded.
+- Never sum per-factor years, and never present them as independent gains: \
+they overlap, so the true total is the `years_recoverable` figure from \
+`actuarial_calc`, not the sum of the parts. If your ranked list implies more \
+years than that figure, you have made an error.
 - Rank suggestions by years recoverable, highest first. Be concrete and specific: \
 "walk 30 minutes after dinner, five days a week" beats "exercise more".
 - This is not a diagnosis. Say so, once, without hedging every sentence.
@@ -102,7 +106,9 @@ def get_reasoner(tools: Sequence[Any]) -> Any:
     the same response -- it never produces a ``tool_call`` for the graph's
     ToolNode to handle, so the routing needs no special case.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    # OFFLINE_REASONER exists so the eval suite and tests stay free and
+    # deterministic even when a real key is present in the environment.
+    if os.getenv("OFFLINE_REASONER") == "1" or not os.getenv("ANTHROPIC_API_KEY"):
         return OfflineReasoner().bind_tools(tools)
 
     from langchain_anthropic import ChatAnthropic
@@ -119,4 +125,6 @@ def get_reasoner(tools: Sequence[Any]) -> Any:
 
 
 def reasoner_name() -> str:
-    return SETTINGS.reasoning_model if os.getenv("ANTHROPIC_API_KEY") else "offline"
+    if os.getenv("OFFLINE_REASONER") == "1" or not os.getenv("ANTHROPIC_API_KEY"):
+        return "offline"
+    return SETTINGS.reasoning_model

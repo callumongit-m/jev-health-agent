@@ -190,3 +190,55 @@ def test_unknown_thread_is_not_silently_created(webhook_client):
     result = webhook_client.post("/webhooks/terra", content=body,
                                  headers=_signed(body)).json()
     assert result["updated"] is False
+
+
+# --- Apple Health import over MCP --------------------------------------
+
+@pytest.mark.asyncio
+async def test_apple_health_import_tool(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    from health_agent.adapters.mcp_server import server
+
+    now = datetime.now(timezone.utc)
+    stamp = (now - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S %z")
+    xml = (
+        '<?xml version="1.0"?><HealthData>'
+        f'<Record type="HKQuantityTypeIdentifierBodyMass" unit="kg" value="88.2" '
+        f'startDate="{stamp}" endDate="{stamp}"/>'
+        f'<Record type="HKQuantityTypeIdentifierRestingHeartRate" unit="count/min" '
+        f'value="71" startDate="{stamp}" endDate="{stamp}"/>'
+        "</HealthData>"
+    )
+    export = tmp_path / "export.xml"
+    export.write_text(xml)
+
+    payload = _unwrap(await server.call_tool("import_apple_health", {"path": str(export)}))
+    assert payload["imported"] is True
+    assert payload["fields"]["weight_kg"] == 88.2
+    assert payload["fields"]["resting_hr"] == 71
+    assert NOTICE in payload["privacy"]
+    assert "age or sex" in payload["next_step"], "must prompt for the baseline inputs"
+
+
+@pytest.mark.asyncio
+async def test_apple_health_import_explains_the_remote_case(tmp_path):
+    """A hosted server cannot read the person's disk; say so usefully."""
+    from health_agent.adapters.mcp_server import server
+
+    payload = _unwrap(
+        await server.call_tool("import_apple_health", {"path": str(tmp_path / "nope.zip")})
+    )
+    assert payload["imported"] is False
+    assert "running remotely" in payload["hint"]
+
+
+@pytest.mark.asyncio
+async def test_apple_health_import_handles_an_empty_export(tmp_path):
+    from health_agent.adapters.mcp_server import server
+
+    export = tmp_path / "export.xml"
+    export.write_text('<?xml version="1.0"?><HealthData></HealthData>')
+    payload = _unwrap(await server.call_tool("import_apple_health", {"path": str(export)}))
+    assert payload["imported"] is False
+    assert "no usable records" in payload["error"]

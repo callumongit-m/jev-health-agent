@@ -135,7 +135,7 @@ def test_openrouter_backend_parses_the_documented_response(monkeypatch):
     result = backend.classify({"age": 54, "bmi": 30.9})
 
     assert captured["headers"]["Authorization"] == "Bearer sk-or-test"
-    assert captured["json"]["model"] == "typesafe/jev-latest"
+    assert captured["json"]["model"] == "~typesafe/jev-latest"
     assert captured["json"]["state"] == {"age": 54, "bmi": 30.9}
     assert len(captured["json"]["questions"]) == 15
 
@@ -213,7 +213,7 @@ def test_auto_prefers_typesafe_then_openrouter_then_fake(monkeypatch):
     assert get_backend("auto", seed=1).name.startswith("fake")
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    assert get_backend("auto").name == "openrouter:typesafe/jev-latest"
+    assert get_backend("auto").name == "openrouter:~typesafe/jev-latest"
 
 
 def test_env_file_is_loaded_and_empty_values_read_as_absent(tmp_path, monkeypatch):

@@ -525,3 +525,57 @@ def check_sparse_profile_does_not_invent_a_priority() -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_years_claimed_do_not_exceed_recoverable(persona: Persona) -> CheckFn:
+    """Per-factor severity weights overlap heavily, so quoting them as
+    independent gains overstates the benefit several times over.
+
+    Naively regexing every "N years" flags legitimate figures -- the baseline,
+    the adjusted estimate, an age. So this compares against what the
+    calculator actually returned: any years figure that is not one of those,
+    and is larger than the total recoverable, is a number the model invented
+    or lifted from the unsaturated ranking weights.
+    """
+
+    import re
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        le = out.get("life_expectancy") or {}
+        recoverable = le.get("years_recoverable")
+        if recoverable is None:
+            return CheckResult(True, "no life expectancy produced")
+
+        legitimate = {
+            round(float(v), 1)
+            for v in (
+                le.get("baseline_remaining_years"),
+                le.get("adjusted_remaining_years"),
+                le.get("estimated_age_at_death"),
+                le.get("years_lost_to_modifiable_factors"),
+                recoverable,
+                *(le.get("per_factor_years") or {}).values(),
+            )
+            if v is not None
+        }
+
+        answer = out.get("answer") or ""
+        quoted = [
+            round(float(m), 1)
+            for m in re.findall(r"(\d+(?:\.\d+)?)\s*year", answer, re.I)
+        ]
+        invented = [
+            q for q in quoted
+            if q > recoverable + 0.5
+            and not any(abs(q - ok) <= 0.15 for ok in legitimate)
+        ]
+        if invented:
+            return CheckResult(
+                False,
+                f"quoted {invented} years, not from actuarial_calc "
+                f"(recoverable {recoverable})",
+            )
+        return CheckResult(True)
+
+    return run

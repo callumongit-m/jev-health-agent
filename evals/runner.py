@@ -134,6 +134,10 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                 (f"rec_grounding[{persona.id}]", "graph",
                  C.check_recommendations_grounded(persona))
             )
+            built.append(
+                (f"years_not_oversold[{persona.id}]", "graph",
+                 C.check_years_claimed_do_not_exceed_recoverable(persona))
+            )
 
         scorable = next(p for p in personas.values() if "complete" in p.tags)
         for text in C.ACUTE_TEXTS:

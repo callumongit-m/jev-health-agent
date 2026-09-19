@@ -139,9 +139,13 @@ def _brief(state: AgentState) -> str:
 
     lines += [
         "",
-        "Modifiable factors, ranked by confidence-weighted years recoverable. "
-        "A low confidence means the data for that factor is thin -- do not "
-        "present it as a priority:",
+        "Modifiable factors, ranked by confidence-weighted years. These are "
+        "SEVERITY WEIGHTS FOR RANKING ONLY. They overlap heavily and DO NOT "
+        "ADD UP -- quoting them as independent gains, or summing them, "
+        "overstates the benefit several times over. For any years figure you "
+        "give the person, use the numbers actuarial_calc returns, which "
+        "account for that overlap. A low confidence means the data for that "
+        "factor is thin: do not present it as a priority.",
     ]
     for f in assessment.top_factors(len(assessment.factors)):
         lines.append(
@@ -156,8 +160,9 @@ def _brief(state: AgentState) -> str:
     lines += [
         "",
         "Call actuarial_calc for life expectancy. Then give: what stands out "
-        "and why, and a ranked set of concrete changes with the years each "
-        "could recover.",
+        "and why, and a ranked set of concrete changes. Quote years only from "
+        "actuarial_calc's per_factor_years and years_recoverable, and make "
+        "clear that the total recoverable is less than the sum of the parts.",
     ]
     return "\n".join(lines)
 

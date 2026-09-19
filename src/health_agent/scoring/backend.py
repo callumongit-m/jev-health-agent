@@ -125,12 +125,19 @@ class JevBackend:
 # OpenRouter
 # --------------------------------------------------------------------------
 
-#: OpenRouter's published path. Secondary sources give the shorter form, so on
-#: a 404 we retry that once and remember whichever answered.
+#: Verified against the live API. OpenRouter's own reference documents
+#: ".../api/v1/api/alpha/decisions", which 404s -- the doubled segment is a
+#: docs generation artifact. The short form is the real one; the doubled form
+#: is kept as a fallback in case they ever make the docs true.
 _OPENROUTER_URLS = (
-    "https://openrouter.ai/api/v1/api/alpha/decisions",
     "https://openrouter.ai/api/alpha/decisions",
+    "https://openrouter.ai/api/v1/api/alpha/decisions",
 )
+
+#: OpenRouter prefixes floating "latest" aliases with a tilde. Without it the
+#: API returns 400 "Model typesafe/jev-latest does not exist". Pin to
+#: "typesafe/jev-1.13" instead if you want a fixed version.
+DEFAULT_OPENROUTER_MODEL = "~typesafe/jev-latest"
 
 
 def _questions_wire() -> dict[str, Any]:
@@ -157,7 +164,7 @@ class OpenRouterBackend:
     def __init__(
         self,
         *,
-        model: str = "typesafe/jev-latest",
+        model: str = DEFAULT_OPENROUTER_MODEL,
         timeout: float = 30.0,
         url: str | None = None,
     ) -> None:
@@ -167,8 +174,8 @@ class OpenRouterBackend:
                 "OPENROUTER_API_KEY is not set. Export it, or run with "
                 "--backend fake to use the offline stand-in."
             )
-        self._model = model
         self._timeout = timeout
+        self._model = os.getenv("OPENROUTER_JEV_MODEL", model)
         override = url or os.getenv("OPENROUTER_DECISIONS_URL")
         self._urls = (override,) if override else _OPENROUTER_URLS
         self._url: str | None = None  # learned on first success
