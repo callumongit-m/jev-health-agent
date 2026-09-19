@@ -1,4 +1,5 @@
 from health_agent.domain.conditions import CONDITIONS, FACTORS
+import os
 import pytest
 from health_agent.domain.profile import HealthProfile, Sex, SmokingStatus
 from health_agent.scoring import FakeBackend, RiskScorer
@@ -213,3 +214,28 @@ def test_auto_prefers_typesafe_then_openrouter_then_fake(monkeypatch):
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     assert get_backend("auto").name == "openrouter:typesafe/jev-latest"
+
+
+def test_env_file_is_loaded_and_empty_values_read_as_absent(tmp_path, monkeypatch):
+    """An unfilled `KEY=` line in .env must not look like a configured key."""
+    from dotenv import load_dotenv
+
+    env = tmp_path / ".env"
+    env.write_text("TYPESAFE_API_KEY=\nREASONING_MODEL=claude-sonnet-5\n")
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("REASONING_MODEL", raising=False)
+    load_dotenv(env, override=False)
+
+    assert not os.getenv("TYPESAFE_API_KEY"), "empty value must be falsy"
+    assert os.getenv("REASONING_MODEL") == "claude-sonnet-5"
+
+
+def test_exported_variable_beats_the_env_file(tmp_path, monkeypatch):
+    """override=False -- a real exported key must win over a stale .env line."""
+    from dotenv import load_dotenv
+
+    env = tmp_path / ".env"
+    env.write_text("REASONING_MODEL=from-file\n")
+    monkeypatch.setenv("REASONING_MODEL", "from-shell")
+    load_dotenv(env, override=False)
+    assert os.getenv("REASONING_MODEL") == "from-shell"

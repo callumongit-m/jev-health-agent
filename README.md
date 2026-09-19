@@ -54,6 +54,13 @@ APIs. Both need credentials; everything else runs offline today.
 uv sync
 export PYTHONPATH=.
 
+# create your .env and fill in the keys (it is gitignored)
+cp .env.example .env
+
+# confirm what is configured and what a run would use -- spends nothing
+uv run python scripts/check_setup.py
+uv run python scripts/check_setup.py --live   # proves the keys actually work
+
 # score a persona (falls back to the offline backend with no API key)
 uv run python scripts/demo_cli.py --persona heavy_smoker_cvd
 

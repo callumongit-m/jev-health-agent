@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
+
+from dotenv import load_dotenv
+
+# Load .env on import, before anything reads an environment variable.
+# override=False so a real exported variable always wins over the file.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 LifeExpectancyMode = Literal["actuarial", "llm_raw"]
 
