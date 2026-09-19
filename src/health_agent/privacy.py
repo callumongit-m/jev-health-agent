@@ -15,8 +15,9 @@ NOTICE = (
 )
 
 DISCLAIMER = (
-    "This is an educational wellness estimate, not a diagnosis and not a medical "
-    "device. It cannot see your full history. Discuss any concern with a clinician."
+    "This is a risk estimate, not a diagnosis, and not a medical device. It "
+    "reflects only what it was told and cannot see your full history. Use it "
+    "to decide what is worth discussing with a clinician, not instead of one."
 )
 
 #: Profile field names that must never reach logs.

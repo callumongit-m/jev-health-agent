@@ -27,7 +27,12 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from health_agent.domain.profile import FieldMeta, HealthProfile, Source
+from health_agent.domain.profile import (
+    COMPUTED_FIELDS,
+    FieldMeta,
+    HealthProfile,
+    Source,
+)
 
 #: Health Auto Export metric name -> (profile field, how to aggregate)
 #: Names are matched case-insensitively with separators stripped, so
@@ -259,7 +264,7 @@ def merge_into(profile: HealthProfile, fields: dict, provenance: dict) -> Health
         keep[field] = value
     return HealthProfile(
         **(
-            profile.model_dump(exclude={"bmi", "provenance"})
+            profile.model_dump(exclude=COMPUTED_FIELDS | {"provenance"})
             | keep
             | {"provenance": profile.provenance | {k: provenance[k] for k in keep}}
         )

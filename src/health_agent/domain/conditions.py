@@ -54,6 +54,7 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
         worsens_with={
             "hba1c_mmol_mol": "increase",
             "weight_kg": "increase",
+            "waist_cm": "increase",
             "fasting_glucose_mmol_l": "increase",
             "moderate_activity_minutes_per_week": "decrease",
         },
@@ -152,12 +153,21 @@ FACTORS: tuple[FactorSpec, ...] = (
     FactorSpec(
         key="adiposity",
         label="Body composition",
-        instructions="How far is this person's body composition from a healthy range?",
+        instructions=(
+            "How much excess body fat is this person carrying? If a "
+            "waist-to-height ratio is given, weigh it above BMI -- BMI "
+            "cannot distinguish muscle from fat, and reads a trained, "
+            "muscular person as overweight when they are not. High activity "
+            "with a normal waist points to lean mass, not adiposity."
+        ),
         levels=(
-            "Healthy weight, BMI roughly 18.5 to 25",
-            "Overweight, BMI roughly 25 to 30",
-            "Obese, BMI roughly 30 to 35",
-            "Severely obese, BMI above 35",
+            "Lean: waist-to-height under 0.5, or a BMI of 25-30 clearly "
+            "explained by muscle in someone who trains regularly",
+            "Mildly over: waist-to-height 0.5 to 0.55, or BMI 25-30 without "
+            "substantial training",
+            "Central adiposity: waist-to-height 0.55 to 0.6, or BMI 30-35",
+            "Marked central adiposity: waist-to-height above 0.6, or BMI "
+            "above 35",
         ),
         max_years_cost=8.0,
     ),

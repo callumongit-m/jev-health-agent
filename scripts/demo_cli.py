@@ -11,7 +11,7 @@ import argparse
 import json
 import sys
 
-from health_agent.domain.profile import HealthProfile
+from health_agent.domain.profile import COMPUTED_FIELDS, HealthProfile
 from health_agent.privacy import DISCLAIMER, NOTICE
 from health_agent.scoring.backend import get_backend
 from health_agent.scoring.scorer import RiskScorer
@@ -90,7 +90,7 @@ def main() -> int:
     overrides = {k: v for k, v in (("age", args.age), ("sex", args.sex)) if v}
     if overrides:
         profile = HealthProfile(
-            **(profile.model_dump(exclude={"bmi", "provenance"}) | overrides),
+            **(profile.model_dump(exclude=COMPUTED_FIELDS | {"provenance"}) | overrides),
             provenance=profile.provenance,
         )
 

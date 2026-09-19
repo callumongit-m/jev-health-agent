@@ -72,7 +72,7 @@ and the reported total is always less than the sum of its parts.
 
 ## Data handling
 
-Health data is not used to train any model. It is sent only to the inference
+Health data is not being used to train any model. It is sent only to the inference
 APIs required to answer a request, under their no-training terms. Nothing is
 retained by default — assessments live in memory for the session and are gone
 when it ends. Persistence happens only if someone opts into reminders or an

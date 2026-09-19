@@ -20,6 +20,9 @@ CLARIFY_PRIORITY: tuple[tuple[str, str], ...] = (
     ("sex", "What sex were you assigned at birth? It changes the baseline risks."),
     ("height_cm", "How tall are you, in cm?"),
     ("weight_kg", "How much do you weigh, in kg?"),
+    ("waist_cm", "What is your waist measurement in cm, at the navel? It "
+                 "tells us more than BMI, and unlike BMI it does not mistake "
+                 "muscle for fat."),
     ("smoking_status", "Do you smoke -- never, formerly, or currently?"),
     ("systolic_bp", "Do you know your blood pressure? The top number is enough."),
     ("hba1c_mmol_mol", "Have you had an HbA1c test? If so, what was it?"),

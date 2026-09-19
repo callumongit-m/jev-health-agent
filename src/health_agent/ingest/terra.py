@@ -19,7 +19,12 @@ import statistics
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from health_agent.domain.profile import FieldMeta, HealthProfile, Source
+from health_agent.domain.profile import (
+    COMPUTED_FIELDS,
+    FieldMeta,
+    HealthProfile,
+    Source,
+)
 
 WIDGET_URL = "https://api.tryterra.co/v2/auth/generateWidgetSession"
 
@@ -233,7 +238,7 @@ def merge_into(profile: HealthProfile, payload: dict[str, Any]) -> HealthProfile
 
     return HealthProfile(
         **(
-            profile.model_dump(exclude={"bmi", "provenance"})
+            profile.model_dump(exclude=COMPUTED_FIELDS | {"provenance"})
             | keep
             | {"provenance": profile.provenance | {k: provenance[k] for k in keep}}
         )

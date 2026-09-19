@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from health_agent.domain.conditions import CONDITIONS
-from health_agent.domain.profile import HealthProfile
+from health_agent.domain.profile import COMPUTED_FIELDS, HealthProfile
 from health_agent.domain.results import RiskAssessment
 from health_agent.scoring.scorer import RiskScorer
 
@@ -91,6 +91,7 @@ _NUDGE: dict[str, float] = {
     "hba1c_mmol_mol": 12.0,
     "fasting_glucose_mmol_l": 1.5,
     "weight_kg": 18.0,
+    "waist_cm": 20.0,
     "systolic_bp": 20.0,
     "ldl_mmol_l": 1.5,
     "hdl_mmol_l": 0.5,
@@ -146,7 +147,7 @@ def _nudged(profile: HealthProfile, field_name: str, direction: str) -> HealthPr
     if new == current:  # already pinned at the bound -- nothing to test
         return None
     try:
-        return HealthProfile(**(profile.model_dump(exclude={"bmi"}) | {field_name: new}))
+        return HealthProfile(**(profile.model_dump(exclude=COMPUTED_FIELDS) | {field_name: new}))
     except Exception:
         return None
 
@@ -199,6 +200,7 @@ _EXTREMES: dict[str, tuple[float, float]] = {
     "egfr": (105.0, 28.0),
     "alt_u_l": (18.0, 120.0),
     "weight_kg": (62.0, 130.0),
+    "waist_cm": (78.0, 120.0),
     "alcohol_units_per_week": (2.0, 50.0),
     "moderate_activity_minutes_per_week": (300.0, 0.0),
 }
@@ -213,7 +215,7 @@ def _pinned(profile: HealthProfile, field_name: str, value: float) -> HealthProf
     coerced = int(round(value)) if is_int else value
     try:
         return HealthProfile(
-            **(profile.model_dump(exclude={"bmi"}) | {field_name: coerced})
+            **(profile.model_dump(exclude=COMPUTED_FIELDS) | {field_name: coerced})
         )
     except Exception:
         return None
@@ -347,7 +349,18 @@ BENIGN_TEXTS: tuple[str, ...] = (
 )
 
 #: Life expectancy must not swing more than this between identical runs.
-LE_TOLERANCE_YEARS = 0.5
+#: The calculator itself is deterministic -- `test_graph.py` pins that with a
+#: zero-noise backend. What varies here is the classifier underneath it, so
+#: the tolerance scales with the backend's noise rather than being fixed:
+#: seven factor scores each jitter, and the spread propagates through into
+#: the years figure.
+LE_TOLERANCE_FLOOR = 0.5
+LE_NOISE_MULTIPLIER = 60.0
+
+
+def _le_tolerance(scorer: RiskScorer) -> float:
+    sigma = getattr(scorer.backend, "noise_sigma", 0.0) or 0.0
+    return max(LE_TOLERANCE_FLOOR, sigma * LE_NOISE_MULTIPLIER)
 
 
 def _assess(scorer: RiskScorer, profile: HealthProfile, raw_text: str | None = None):
@@ -423,9 +436,12 @@ def check_life_expectancy_stability(persona: Persona) -> CheckFn:
                 return CheckResult(False, "no life expectancy produced")
             values.append(le)
         spread = max(values) - min(values)
-        if spread > LE_TOLERANCE_YEARS:
+        tolerance = _le_tolerance(scorer)
+        if spread > tolerance:
             return CheckResult(
-                False, f"spread {spread:.2f} years across runs: {values}"
+                False,
+                f"spread {spread:.2f} years across runs "
+                f"(tolerance {tolerance:.2f}): {values}",
             )
         return CheckResult(True)
 

@@ -21,7 +21,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, UploadFile
 from fastapi import File as FastAPIFile
 
 from health_agent.adapters import sync_store
-from health_agent.domain.profile import HealthProfile
+from health_agent.domain.profile import COMPUTED_FIELDS, HealthProfile
 from health_agent.ingest import health_sync
 from health_agent.privacy import NOTICE, redact
 
@@ -51,7 +51,7 @@ def _session(authorization: str | None) -> tuple[str, HealthProfile]:
 def _apply(token: str, profile: HealthProfile, fields: dict, provenance: dict) -> dict:
     updated = health_sync.merge_into(profile, fields, provenance)
     sync_store.remember_profile(
-        token, updated.model_dump_json(exclude={"bmi", "provenance"})
+        token, updated.model_dump_json(exclude=COMPUTED_FIELDS | {"provenance"})
     )
     record = sync_store.resolve(token)
     thread_id = record["thread_id"] if record else None

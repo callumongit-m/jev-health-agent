@@ -8,6 +8,7 @@ def test_notice_states_no_training():
 
 def test_disclaimer_is_non_diagnostic():
     assert "not a diagnosis" in DISCLAIMER
+    assert "not a medical device" in DISCLAIMER
 
 
 def test_redact_scrubs_only_sensitive_fields():
@@ -30,7 +31,7 @@ def test_every_clinical_field_is_marked_sensitive():
     }
     # fields added later must be classified deliberately, not by omission
     assert missing <= {
-        "years_smoked", "sleep_hours_avg", "sleep_efficiency_pct", "steps_daily_avg",
+        "waist_cm", "years_smoked", "sleep_hours_avg", "sleep_efficiency_pct", "steps_daily_avg",
         "moderate_activity_minutes_per_week", "diet_quality_self_rating",
         "perceived_stress_rating", "alcohol_units_per_week",
     }, f"unclassified fields: {missing}"

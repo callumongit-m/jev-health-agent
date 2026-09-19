@@ -23,7 +23,12 @@ from pathlib import Path
 from typing import Any, Iterator
 from xml.etree import ElementTree
 
-from health_agent.domain.profile import FieldMeta, HealthProfile, Source
+from health_agent.domain.profile import (
+    COMPUTED_FIELDS,
+    FieldMeta,
+    HealthProfile,
+    Source,
+)
 
 #: Apple record type -> (profile field, aggregation)
 #: "mean" averages the samples in the window; "sum_per_day" totals each day
@@ -235,7 +240,7 @@ def merge_into(profile: HealthProfile, path: str | Path, **kwargs) -> HealthProf
 
     return HealthProfile(
         **(
-            profile.model_dump(exclude={"bmi", "provenance"})
+            profile.model_dump(exclude=COMPUTED_FIELDS | {"provenance"})
             | keep
             | {"provenance": profile.provenance | {k: provenance[k] for k in keep}}
         )

@@ -1,16 +1,18 @@
 # Health Risk Agent
 
+Using modern technolgies to make fully pesonalised health consulations accesible to all people who have internet access.
+
 Most people never find out they were on a trajectory toward something until
 they are already on it. The information needed to say so earlier usually
-exists — in a wearable, a blood test, a few honest answers — but turning it
+exists: in a wearable, a blood test, a few honest answers, but turning it
 into a straight answer costs a consultation most people will not book.
 
 This is an attempt at closing that gap. Give it what you know, and it returns
 calibrated probabilities for the conditions you are actually heading toward,
 an estimate of how long you have, and a ranked list of what would change it —
-with the reasoning shown, not just the numbers.
+with the reasoning shown.
 
-It has no interface. It is built to be *called* — by Claude, ChatGPT, or any
+It has no interface. It is built to be *called*: by Claude, ChatGPT, or any
 other agent — so the barrier to using it is a conversation you were having
 anyway, not another app to sign up for.
 
