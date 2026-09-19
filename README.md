@@ -1,4 +1,4 @@
-# Health Risk Agent
+# Fitty
 
 Using modern technolgies to make fully pesonalised health consulations accesible to 100% of the people who have internet access.
 

@@ -25,8 +25,8 @@ from health_agent.adapters.core import assess
 from health_agent.privacy import DISCLAIMER, NOTICE
 
 INSTRUCTIONS = f"""\
-Estimates a person's probability of developing common chronic conditions, their \
-life expectancy, and what would most improve both.
+Fitty estimates a person's probability of developing common chronic \
+conditions, their life expectancy, and what would most improve both.
 
 Collect what you can conversationally and pass it to `assess_health` -- every \
 field is optional, and the tool will tell you what else it needs rather than \
@@ -37,8 +37,8 @@ guessing. Do not invent values you have not been told.
 {DISCLAIMER}"""
 
 server = MCPServer(
-    name="health-risk-agent",
-    title="Health Risk Agent",
+    name="fitty",
+    title="Fitty",
     instructions=INSTRUCTIONS,
     version="0.2.0",
 )

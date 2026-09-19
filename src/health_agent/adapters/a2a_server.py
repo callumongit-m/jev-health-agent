@@ -53,7 +53,7 @@ CARD_URL = "/.well-known/agent-card.json"
 
 def build_agent_card(base_url: str) -> AgentCard:
     return AgentCard(
-        name="Health Risk Agent",
+        name="Fitty",
         description=(
             "Estimates a person's probability of developing common chronic "
             "conditions, their life expectancy, and the changes that would "
@@ -205,7 +205,7 @@ def build_app(base_url: str = "http://localhost:9000"):
         task_store=InMemoryTaskStore(),
         agent_card=card,
     )
-    app = FastAPI(title="Health Risk Agent (A2A)")
+    app = FastAPI(title="Fitty (A2A)")
 
     # Wearable updates arrive here and resume the existing thread.
     from health_agent.adapters.health_ingest import router as health_router

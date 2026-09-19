@@ -54,7 +54,7 @@ class BearerTokenMiddleware:
             response = JSONResponse(
                 {"error": "unauthorized", "detail": "missing or invalid bearer token"},
                 status_code=401,
-                headers={"WWW-Authenticate": 'Bearer realm="health-agent"'},
+                headers={"WWW-Authenticate": 'Bearer realm="fitty"'},
             )
             await response(scope, receive, send)
             return
