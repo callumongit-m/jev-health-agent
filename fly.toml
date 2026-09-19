@@ -1,0 +1,37 @@
+# fly launch --no-deploy  then  fly deploy
+app = "jev-health-agent"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RESPONSE_MODE = "data"
+  CHECKPOINT_PATH = "/data/health_agent.sqlite"
+  # Baked into the sync links people are given, so it has to be the real one.
+  PUBLIC_BASE_URL = "https://jev-health-agent.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale to zero between assessments. Machines start in well under a second,
+  # which an MCP call absorbs without anyone noticing.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.checks]
+    [http_service.checks.health]
+      path = "/healthz"
+      interval = "30s"
+      timeout = "5s"
+      grace_period = "10s"
+
+# Reminders and wearable sync tokens. Without this they are lost on deploy.
+[[mounts]]
+  source = "health_agent_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

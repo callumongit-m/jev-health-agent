@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import MCPServer
@@ -208,6 +209,35 @@ def delete_my_data(
     )
 
 
+def build_http_app(*, require_auth: bool = False):
+    """The ASGI app a host serves, wrapped in bearer-token auth.
+
+    Also carries the health endpoints a platform needs to know the container
+    is alive, and the wearable ingest routes so one deployment serves both.
+    """
+    import uvicorn  # noqa: F401  (imported here so stdio has no dependency)
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    from health_agent.adapters.auth import protect
+    from health_agent.config import SETTINGS
+
+    async def healthz(_request):
+        return JSONResponse(
+            {
+                "ok": True,
+                "response_mode": SETTINGS.response_mode,
+                "scoring": "jev" if SETTINGS.has_typesafe_key
+                           else "openrouter" if os.getenv("OPENROUTER_API_KEY")
+                           else "offline-fake",
+            }
+        )
+
+    app = server.streamable_http_app(host="0.0.0.0")
+    app.router.routes.append(Route("/healthz", healthz, methods=["GET"]))
+    return protect(app, require=require_auth)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -216,14 +246,23 @@ def main() -> None:
         help="streamable-http is what a remote MCP connector needs",
     )
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
+    parser.add_argument(
+        "--require-auth", action="store_true",
+        help="refuse to start without MCP_AUTH_TOKEN. Use this in deployment.",
+    )
     args = parser.parse_args()
 
     if args.transport == "stdio":
         server.run("stdio")
-    else:
-        # host/port are transport kwargs in mcp 2.x, not server settings
-        server.run(args.transport, host=args.host, port=args.port)
+        return
+
+    import uvicorn
+
+    uvicorn.run(
+        build_http_app(require_auth=args.require_auth),
+        host=args.host, port=args.port, log_level="info",
+    )
 
 
 if __name__ == "__main__":

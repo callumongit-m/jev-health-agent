@@ -1,0 +1,10 @@
+.venv/
+.git/
+.env
+tests/
+evals/
+scripts/
+__pycache__/
+*.sqlite
+.pytest_cache/
+.DS_Store

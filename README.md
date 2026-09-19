@@ -184,6 +184,14 @@ only API cost in the default path: `ANTHROPIC_API_KEY` is needed only for
 `RESPONSE_MODE=narrated`. With no keys at all, everything falls back to
 offline stand-ins so it stays runnable and testable.
 
+## Deploying
+
+[DEPLOY.md](DEPLOY.md) covers both: testing with Claude Desktop in five
+minutes with no deployment at all, and a Fly.io deploy for a public endpoint.
+
+The public endpoint requires `MCP_AUTH_TOKEN` and refuses to boot without it
+— an open MCP server lets anyone post health data and spend your Jev credits.
+
 ## Evals: pass^k, not pass@k
 
 The system is stochastic, so one green run proves nothing. Every check runs k
