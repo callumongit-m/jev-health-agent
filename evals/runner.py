@@ -139,6 +139,19 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                  C.check_years_claimed_do_not_exceed_recoverable(persona))
             )
 
+        for age, extra, expected in C.AGE_EVIDENCE_CASES:
+            tag = "+".join(sorted(extra)) or "lifestyle only"
+            built.append(
+                (f"age_band[{age}, {tag}]", "graph",
+                 C.check_age_band_gating(age, extra, expected))
+            )
+        built.append(
+            ("evidence_caps_certainty", "graph", C.check_thin_evidence_caps_certainty())
+        )
+        built.append(
+            ("asks_age_appropriate", "graph", C.check_asks_only_for_what_the_age_needs())
+        )
+
         scorable = next(p for p in personas.values() if "complete" in p.tags)
         for text in C.ACUTE_TEXTS:
             built.append(

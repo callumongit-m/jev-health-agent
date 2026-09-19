@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from health_agent import safety
 from health_agent.config import SETTINGS
+from health_agent.domain import evidence as evidence_rules
 from health_agent.domain.profile import HealthProfile
 from health_agent.graph import tools as agent_tools
 from health_agent.graph.reasoner import SYSTEM_PROMPT, get_reasoner
@@ -25,7 +26,11 @@ CLARIFY_PRIORITY: tuple[tuple[str, str], ...] = (
                  "muscle for fat."),
     ("smoking_status", "Do you smoke -- never, formerly, or currently?"),
     ("systolic_bp", "Do you know your blood pressure? The top number is enough."),
-    ("hba1c_mmol_mol", "Have you had an HbA1c test? If so, what was it?"),
+    ("hba1c_mmol_mol",
+     "Have you had an HbA1c or fasting glucose test? At your age it makes a "
+     "real difference to the estimate -- a GP or a home test can do it."),
+    ("fasting_glucose_mmol_l", "Do you know your fasting blood glucose?"),
+    ("total_cholesterol_mmol_l", "Do you know your total cholesterol?"),
     (
         "moderate_activity_minutes_per_week",
         "Roughly how many minutes a week do you do moderate exercise?",
@@ -59,23 +64,43 @@ def make_nodes(scorer: RiskScorer):
         }
 
     def classify(state: AgentState) -> dict:
-        """One Jev call. No LLM involved."""
-        return {"assessment": scorer.score(state["profile"])}
+        """One Jev call, then the age-aware evidence check. No LLM involved."""
+        profile = state["profile"]
+        return {
+            "assessment": scorer.score(profile),
+            "evidence": evidence_rules.assess(profile),
+        }
 
     def clarify(state: AgentState) -> dict:
-        """Return targeted questions to the CALLING agent rather than guessing."""
+        """Ask for exactly what this person's age band needs, and say why.
+
+        Asking a 21-year-old for an HbA1c they have never had is how you lose
+        them. Asking a 55-year-old to skip it is how you publish a number you
+        cannot stand behind.
+        """
         profile: HealthProfile = state["profile"]
-        known = profile.known_fields()
+        evidence = state.get("evidence") or evidence_rules.assess(profile)
+        prompts = dict(CLARIFY_PRIORITY)
+
         questions = [
-            text for field, text in CLARIFY_PRIORITY if field not in known
+            prompts.get(field, f"What is your {field.replace('_', ' ')}?")
+            for field in evidence.missing_required
         ][:MAX_CLARIFYING_QUESTIONS]
+
+        if not questions:
+            known = profile.known_fields()
+            questions = [
+                text for field, text in CLARIFY_PRIORITY if field not in known
+            ][:MAX_CLARIFYING_QUESTIONS]
         if not questions:
             questions = ["Anything else about your health that might be relevant?"]
+
         return {
             "clarifying_questions": questions,
             "status": "needs_input",
             "answer": (
-                "I need a bit more before I can give you numbers worth trusting."
+                "I need a little more before the numbers would be worth "
+                f"trusting. {evidence.band.rationale}"
             ),
         }
 
@@ -127,17 +152,41 @@ def _brief(state: AgentState) -> str:
     assessment = state["assessment"]
     profile: HealthProfile = state["profile"]
 
+    evidence = state.get("evidence")
+    body = (
+        f"waist-to-height {profile.waist_to_height}"
+        if profile.waist_to_height is not None
+        else f"BMI {profile.bmi} (no waist given, so this may overstate body "
+             f"fat for someone who trains)"
+    )
     lines = [
         "Classifier output for this person. Explain it and act on it.",
         "",
-        f"Age {profile.age}, sex {profile.sex}, BMI {profile.bmi}.",
-        f"Data sufficiency {assessment.data_sufficiency:.0%}.",
+        f"Age {profile.age}, sex {profile.sex}, {body}.",
+        f"Data sufficiency {assessment.data_sufficiency:.0%}.",]
+    if evidence is not None:
+        lines += [
+            f"Evidence basis: {evidence.tier.label}. Say what the estimate "
+            f"rests on, and do not imply more certainty than that supports.",
+        ]
+        if evidence.missing_recommended:
+            lines.append(
+                "Getting "
+                + ", ".join(evidence.missing_recommended)
+                + " would sharpen it -- suggest it once, concretely, without "
+                "making it a condition of acting on what is already clear."
+            )
+    lines += [
         "",
         "Probabilities (with certainty -- low certainty means speak in ranges):",
     ]
+    ceiling = evidence.confidence_ceiling if evidence is not None else 1.0
     for c in sorted(assessment.conditions, key=lambda x: -x.probability):
+        shown = min(c.certainty, ceiling)
+        capped = " [capped by evidence available]" if c.certainty > ceiling else ""
         lines.append(
-            f"  {c.label}: {c.probability:.0%} ({c.band}, certainty {c.certainty:.2f})"
+            f"  {c.label}: {c.probability:.0%} ({c.band}, "
+            f"certainty {shown:.2f}){capped}"
         )
 
     lines += [
@@ -191,12 +240,21 @@ def build_payload(state: AgentState) -> dict:
     # untrustworthy, and a calling agent given numbers will present them as
     # final regardless of the caveat attached.
     if assessment is not None and state.get("status") not in ("seek_care", "needs_input"):
+        # Thin evidence caps how certain the report may sound, however
+        # confident the classifier is. A lifestyle-only estimate and one
+        # backed by bloods should not read with the same authority.
+        ceiling = (
+            state["evidence"].confidence_ceiling
+            if state.get("evidence") is not None
+            else 1.0
+        )
         payload["risk"] = {
             c.key: {
                 "label": c.label,
                 "probability": round(c.probability, 4),
                 "band": c.band,
-                "certainty": c.certainty,
+                "certainty": round(min(c.certainty, ceiling), 3),
+                "certainty_capped_by_evidence": c.certainty > ceiling,
             }
             for c in assessment.conditions
         }
@@ -211,6 +269,8 @@ def build_payload(state: AgentState) -> dict:
         }
         payload["data_sufficiency"] = round(assessment.data_sufficiency, 3)
         payload["model"] = assessment.model
+    if state.get("evidence") is not None:
+        payload["evidence"] = state["evidence"].as_dict()
     if state.get("life_expectancy"):
         payload["life_expectancy"] = state["life_expectancy"]
     return payload

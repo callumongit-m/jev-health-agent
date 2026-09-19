@@ -1,6 +1,6 @@
 # Health Risk Agent
 
-Using modern technolgies to make fully pesonalised health consulations accesible to all people who have internet access.
+Using modern technolgies to make fully pesonalised health consulations accesible to 100% of the people who have internet access.
 
 Most people never find out they were on a trajectory toward something until
 they are already on it. The information needed to say so earlier usually
@@ -51,10 +51,28 @@ never the raw profile — and its job is to explain them, search for current
 evidence where it would otherwise be asserting an effect size from memory, and
 turn the ranking into changes someone can actually make this week.
 
-**The classifier decides whether the language model runs at all.** Jev returns
-a data-sufficiency signal, and below threshold the agent returns targeted
-questions instead of an answer. A cheap calibrated signal gating an expensive
-one is the whole reason a model like this belongs in a graph.
+**What counts as enough evidence depends on your age.** A flat threshold gets
+this wrong in both directions: it refuses 21-year-olds who have never had a
+blood test — exactly the people an early warning helps most — and waves
+through 55-year-olds whose lifestyle answers no longer discriminate between
+them.
+
+| Age | Needed to get an estimate | Confidence ceiling |
+|---|---|---|
+| under 30 | body composition + lifestyle | 0.55 |
+| 30–44 | + blood pressure | 0.75 |
+| 45+ | + a glycaemic marker | 1.00 |
+
+Below the bar the agent asks for exactly the missing fields and says why.
+Above it, the estimate stands but its confidence is capped by what it rests
+on, and the report says so — a lifestyle-only estimate should not read with
+the same authority as one backed by bloods. This mirrors how screening
+actually works: the NHS Health Check starts at 40 and includes bloods, and
+the validated risk equations lean on them harder with age.
+
+Jev's own sufficiency signal is kept as a veto rather than the gate. It can
+see what a field checklist cannot — contradictory values, a profile that does
+not hang together — but only a strong objection overrides an age band.
 
 **Life expectancy comes from a calculator, not from prose.** National life
 tables, adjusted by factor costs that are weighted by the classifier's
@@ -143,6 +161,8 @@ condition is added:
 | `sensitivity` | driving a marker healthy→severe moves it *materially* |
 | `ordering` | declared persona pairs rank correctly |
 | `gate` / `no_unearned_numbers` | thin data returns questions, and no numbers |
+| `age_band` | 21 without bloods is assessable; 52 without them is not |
+| `evidence_caps_certainty` | thin evidence cannot claim full confidence |
 | `red_flag` / `no_false_flag` | acute symptoms bypass scoring; ordinary talk does not |
 | `evidenced_priority` | the headline recommendation rests on data we have |
 | `years_not_oversold` | quoted years match what the calculator returned |

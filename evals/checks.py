@@ -595,3 +595,93 @@ def check_years_claimed_do_not_exceed_recoverable(persona: Persona) -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+# --------------------------------------------------------------------------
+# Age-aware evidence
+# --------------------------------------------------------------------------
+
+#: (age, extra fields, should it produce an estimate without bloods?)
+AGE_EVIDENCE_CASES: tuple[tuple[int, dict, bool], ...] = (
+    (21, {}, True),
+    (27, {}, True),
+    (38, {"systolic_bp": 124, "diastolic_bp": 78}, True),
+    (38, {}, False),
+    (52, {"systolic_bp": 134, "diastolic_bp": 84}, False),
+    (52, {"systolic_bp": 134, "diastolic_bp": 84, "hba1c_mmol_mol": 38}, True),
+    (70, {"systolic_bp": 140, "diastolic_bp": 86}, False),
+)
+
+_EVIDENCE_BASE = {
+    "sex": "male", "height_cm": 180.0, "weight_kg": 82.0,
+    "smoking_status": "never", "alcohol_units_per_week": 4.0,
+    "moderate_activity_minutes_per_week": 180, "sleep_hours_avg": 7.0,
+    "diet_quality_self_rating": 4,
+}
+
+
+def check_age_band_gating(age: int, extra: dict, should_estimate: bool) -> CheckFn:
+    """A 21-year-old must get an answer without bloods; a 52-year-old must not.
+
+    A flat threshold turns away the young people an early warning helps most,
+    and waves through older people whose lifestyle data no longer discriminates.
+    """
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        profile = HealthProfile(**(_EVIDENCE_BASE | {"age": age} | extra))
+        out = _assess(scorer, profile)
+        estimated = out["status"] == "complete"
+        if estimated != should_estimate:
+            return CheckResult(
+                False,
+                f"age {age} with {sorted(extra)}: status {out['status']!r}, "
+                f"expected {'an estimate' if should_estimate else 'to be asked for more'}",
+            )
+        if not estimated:
+            asked = (out.get("evidence") or {}).get("missing_required") or []
+            if not asked:
+                return CheckResult(False, f"age {age} refused without saying what it needs")
+        return CheckResult(True)
+
+    return run
+
+
+def check_thin_evidence_caps_certainty() -> CheckFn:
+    """A lifestyle-only estimate must not read as confidently as one with bloods."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        lean = _assess(scorer, HealthProfile(**(_EVIDENCE_BASE | {"age": 24})))
+        if lean["status"] != "complete":
+            return CheckResult(False, "a 24-year-old should get an estimate")
+
+        ceiling = lean["evidence"]["confidence_ceiling"]
+        if ceiling >= 1.0:
+            return CheckResult(False, "lifestyle-only evidence claimed full confidence")
+        over = [
+            k for k, v in lean["risk"].items() if v["certainty"] > ceiling + 1e-6
+        ]
+        if over:
+            return CheckResult(False, f"{over} report certainty above the ceiling")
+        return CheckResult(True)
+
+    return run
+
+
+def check_asks_only_for_what_the_age_needs() -> CheckFn:
+    """Asking a 21-year-old for an HbA1c they have never had loses them."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        young = HealthProfile(age=21, sex="male", height_cm=180.0)
+        out = _assess(scorer, young)
+        questions = " ".join(out.get("questions") or []).lower()
+        if "hba1c" in questions or "cholesterol" in questions:
+            return CheckResult(False, f"asked a 21-year-old for bloods: {questions[:120]}")
+
+        older = HealthProfile(**(_EVIDENCE_BASE | {"age": 58, "systolic_bp": 132, "diastolic_bp": 82}))
+        out = _assess(scorer, older)
+        asked = (out.get("evidence") or {}).get("missing_required") or []
+        if "hba1c_mmol_mol" not in asked:
+            return CheckResult(False, f"did not ask a 58-year-old for bloods: {asked}")
+        return CheckResult(True)
+
+    return run

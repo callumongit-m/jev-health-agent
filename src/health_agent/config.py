@@ -12,7 +12,10 @@ LifeExpectancyMode = Literal["actuarial", "llm_raw"]
 # descriptor rather than the default value, so defaults live here instead.
 DEFAULT_REASONING_MODEL = "claude-sonnet-5"
 DEFAULT_LIFE_EXPECTANCY_MODE: LifeExpectancyMode = "actuarial"
-DEFAULT_SUFFICIENCY_THRESHOLD = 0.5
+DEFAULT_SUFFICIENCY_THRESHOLD = 0.4
+#: Age-banded field requirements are the primary gate; the classifier only
+#: overrides them when it objects strongly, so this sits well below them.
+DEFAULT_CLASSIFIER_VETO = 0.15
 DEFAULT_CHECKPOINT_PATH = "health_agent.sqlite"
 
 #: Anthropic's server-side web search runs on Anthropic's infrastructure -- no
@@ -49,8 +52,10 @@ class Settings:
     #:                how much run-to-run spread that actually costs.
     life_expectancy_mode: LifeExpectancyMode = DEFAULT_LIFE_EXPECTANCY_MODE
 
-    #: Below this Jev data-sufficiency the graph asks for more instead of guessing.
+    #: Retained for the standalone actuarial guard.
     sufficiency_threshold: float = DEFAULT_SUFFICIENCY_THRESHOLD
+    #: Only a strong classifier objection overrides the age-band requirements.
+    classifier_veto_threshold: float = DEFAULT_CLASSIFIER_VETO
 
     checkpoint_path: str = DEFAULT_CHECKPOINT_PATH
 
@@ -78,6 +83,9 @@ def load() -> Settings:
         ),
         checkpoint_path=os.getenv("CHECKPOINT_PATH", DEFAULT_CHECKPOINT_PATH),
         enable_web_search=os.getenv("ENABLE_WEB_SEARCH", "1") not in ("0", "false"),
+        classifier_veto_threshold=float(
+            os.getenv("CLASSIFIER_VETO_THRESHOLD", DEFAULT_CLASSIFIER_VETO)
+        ),
     )
 
 

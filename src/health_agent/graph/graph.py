@@ -42,9 +42,22 @@ def _after_screen(state: AgentState) -> Literal["classify", "__end__"]:
 
 
 def _gate(state: AgentState) -> Literal["reason", "clarify"]:
-    """Jev's calibrated sufficiency decides whether to spend an LLM call."""
-    assessment = state["assessment"]
-    if assessment.data_sufficiency < SETTINGS.sufficiency_threshold:
+    """Two signals, and both have to agree.
+
+    The deterministic one is age-aware: what counts as enough evidence at 21
+    is not what counts at 55, and a flat threshold turns away the young
+    people an early warning helps most.
+
+    Jev's calibrated sufficiency is kept as a veto rather than the primary
+    gate. It can see things a field checklist cannot -- contradictory values,
+    a profile that does not hang together -- but only a strong objection
+    overrides a profile that meets its age band, otherwise the deterministic
+    rule means nothing.
+    """
+    evidence = state["evidence"]
+    if not evidence.sufficient:
+        return "clarify"
+    if state["assessment"].data_sufficiency < SETTINGS.classifier_veto_threshold:
         return "clarify"
     return "reason"
 

@@ -21,6 +21,7 @@ class AgentState(TypedDict, total=False):
     #: free text the caller supplied alongside (or instead of) structured fields
     raw_text: str | None
     profile: HealthProfile
+    evidence: Any
     assessment: RiskAssessment
     life_expectancy: dict[str, Any] | None
 

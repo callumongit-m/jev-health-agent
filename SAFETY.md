@@ -55,11 +55,19 @@ must not — and those cases are locked into the test suite.
 
 Three rules, enforced in code rather than left to good intentions:
 
-**Numbers are withheld unless they are earned.** When there is not enough data
-to score confidently, the response carries no probabilities at all — just
-specific questions. It does not return a hedged number with a caveat attached,
-because anything handed a number will present it as final regardless of the
-caveat.
+**Numbers are withheld unless they are earned, and "enough" depends on age.**
+Under 30, lifestyle and body composition carry most of the signal and almost
+nobody has had a blood test, so an estimate is given without one. From 30,
+blood pressure is required. From 45 — when metabolic disease is common and
+often silent — a glycaemic marker is required, because lifestyle alone stops
+telling people apart. Below the bar, the response carries no probabilities at
+all, just specific questions and the reason for them. It does not return a
+hedged number with a caveat attached, because anything handed a number will
+present it as final regardless of the caveat.
+
+**An estimate says what it rests on.** Confidence is capped by the evidence
+behind it: a lifestyle-only assessment cannot report the same certainty as
+one backed by bloods, however sure the classifier sounds.
 
 **Missing data cannot become a finding.** Every factor is weighted by how
 confident the classifier is. Something never measured cannot deduct years from
