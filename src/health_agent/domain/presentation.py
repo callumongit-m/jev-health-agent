@@ -32,7 +32,7 @@ class Presentation:
     headline: str
     must_include: tuple[str, ...]
     must_not: tuple[str, ...]
-    ranked_actions: tuple[dict[str, Any], ...]
+    ranked_areas: tuple[dict[str, Any], ...]
     framing: dict[str, str]
     offer: str | None = None
     evidence: tuple[dict[str, Any], ...] = ()
@@ -42,7 +42,7 @@ class Presentation:
             "headline": self.headline,
             "must_include_verbatim": list(self.must_include),
             "must_not": list(self.must_not),
-            "ranked_actions": list(self.ranked_actions),
+            "ranked_areas": list(self.ranked_areas),
             "framing": self.framing,
         }
         if self.offer:
@@ -61,56 +61,65 @@ LIFE_EXPECTANCY_OFFER = (
 )
 
 
-#: Phrasings per factor, as (already-doing-well, needs-work). Telling a former
-#: smoker to "stop smoking" is the kind of thing that costs you their trust in
-#: everything else on the list, so severity picks the wording.
-ACTION_TEXT: dict[str, tuple[str, str]] = {
+# Areas, not instructions. Fitty has a questionnaire and nothing else --
+# no examination, no history, often no bloods -- which is enough to say
+# where the weight sits in someone's picture and not enough to tell them
+# what to do about it. So each of these names the area and its direction,
+# and stops short of a prescription.
+AREA_TEXT: dict[str, tuple[str, str]] = {
     "smoking_burden": (
-        "Stay stopped. The excess risk keeps falling the longer you do, and "
-        "most of it goes within about fifteen years.",
-        "Stop smoking. Nothing else on this list comes close.",
+        "Smoking is not currently costing you anything here.",
+        "Smoking is the heaviest single factor in your picture.",
     ),
     "adiposity": (
-        "Hold your current waist measurement -- it is already working for you.",
-        "Bring your waist down. Under half your height is the target.",
+        "Body composition is working in your favour.",
+        "Body composition is carrying real weight in your picture.",
     ),
     "activity_deficit": (
-        "Keep the training up; it is doing a lot of work here.",
-        "Get to 150 minutes of moderate activity a week -- a brisk 30-minute "
-        "walk, five days.",
+        "Your activity level is doing a lot of work for you.",
+        "Physical activity is one of the larger gaps in your picture.",
     ),
     "sleep_debt": (
-        "Protect the sleep you are getting; it is in the right range.",
-        "Protect seven to nine hours at consistent times. Start with what is "
-        "cutting it short rather than trying to fix everything.",
+        "Your sleep is in a good range.",
+        "Sleep is showing up as a meaningful factor for you.",
     ),
     "alcohol_burden": (
-        "Alcohol is not costing you anything at this level.",
-        "Bring alcohol within 14 units a week, with several drink-free days.",
+        "Alcohol is not a significant factor at your level.",
+        "Alcohol intake is contributing measurably here.",
     ),
     "diet_quality": (
-        "Diet is broadly working; look at the specific gaps rather than "
-        "overhauling it.",
-        "Shift toward whole foods, vegetables and fibre; cut ultra-processed "
-        "food.",
+        "Diet is broadly working in your favour.",
+        "Diet is one of the areas carrying weight in your picture.",
     ),
     "stress_load": (
-        "Stress is not a significant cost for you at the moment.",
-        "Treat sustained stress as a health problem rather than a personality "
-        "trait -- it carries a measurable cost here.",
+        "Stress is not a significant factor for you at the moment.",
+        "Sustained stress is registering as a real factor, not just a mood.",
     ),
 }
 
-#: Above this normalised severity, the factor needs work rather than holding.
+#: Above this normalised severity, the area is a gap rather than a strength.
 NEEDS_WORK = 0.34
 
 
-def action_for(factor) -> str:
-    variants = ACTION_TEXT.get(factor.key)
+def area_for(factor) -> str:
+    variants = AREA_TEXT.get(factor.key)
     if variants is None:
-        return f"Improve {factor.label.lower()}."
+        return f"{factor.label} is a factor in your picture."
     return variants[1] if factor.severity > NEEDS_WORK else variants[0]
 
+
+#: Said on every report that reaches someone. This is the whole posture:
+#: a questionnaire can locate where the weight sits, and cannot tell anyone
+#: what to do about it.
+SCOPE_STATEMENT = (
+    "Fitty is a consultation, not professional medical advice. It has your "
+    "answers and nothing else -- it has not examined you, has not seen your "
+    "history, and does not have the information needed to tell you what you "
+    "specifically should do. What it can do is show which areas carry the "
+    "most weight in your own picture, and point at the research on why those "
+    "areas matter. Deciding what to actually change, and how, is a "
+    "conversation to have with a clinician."
+)
 
 def build(
     assessment: RiskAssessment,
@@ -153,15 +162,15 @@ def build(
         items = [readable.get(f, f) for f in evidence.missing_recommended][:2]
         must.append(f"Getting {' and '.join(items)} would sharpen this materially.")
 
-    actions: list[dict[str, Any]] = []
+    areas: list[dict[str, Any]] = []
     per_factor = (life_expectancy or {}).get("per_factor_years") or {}
     for factor in assessment.top_factors(4):
         years = per_factor.get(factor.key, factor.expected_years_cost)
         if years <= 0.05:
             continue
-        actions.append(
+        areas.append(
             {
-                "action": action_for(factor),
+                "area": area_for(factor),
                 "years_recoverable": round(years, 2),
                 "current": factor.level_label,
                 "confidence": factor.confidence,
@@ -176,7 +185,7 @@ def build(
             f"factors overlap -- do not sum them."
         )
 
-    must += [DISCLAIMER, NOTICE]
+    must += [SCOPE_STATEMENT, DISCLAIMER, NOTICE]
 
     offer = LIFE_EXPECTANCY_OFFER if life_expectancy else None
 
@@ -190,8 +199,15 @@ def build(
             "sentence they did not ask for.",
             "Do not name a condition the person might have based on symptoms. "
             "Relay the urgency and what to tell a clinician, and stop there.",
-            "Do not add up the per-action year figures. They overlap; the "
+            "Do not add up the per-area year figures. They overlap; the "
             "total is given separately.",
+            "Do not turn an area into an instruction. Naming physical "
+            "activity as a factor is supported; telling someone to walk for "
+            "thirty minutes five days a week is not -- that is advice this "
+            "has no basis for giving. Say what carries weight and leave the "
+            "what-to-do-about-it to a clinician.",
+            "Do not present the research as a recommendation. It shows the "
+            "area matters; it does not say what this person should do.",
             "Do not state a probability that is not in `risk`, and do not "
             "round one into a stronger claim than it makes.",
             "Do not present a capped certainty as settled -- check "
@@ -207,12 +223,12 @@ def build(
             "advice. The advice comes from the guidance; the research is "
             "the reason to believe it.",
         ),
-        ranked_actions=tuple(actions),
+        ranked_areas=tuple(areas),
         framing={
             "tone": "Direct and specific. This is someone's health, not a "
                     "sales page -- no false reassurance, no alarmism.",
             "order": "Urgent triage first if present, then what stands out "
-                     "and why, then the ranked actions, then the caveats, "
+                     "and why, then the areas by weight, then the caveats, "
                      "and end by asking the `ask_then_stop` question.",
             "length": "Aim for something readable in under two minutes.",
             "ask_then_stop": "Put this question at the very end and stop "

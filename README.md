@@ -46,11 +46,13 @@ questions — seven conditions, seven modifiable factors, one data-sufficiency
 check, and two acute safety screens — go out in a single call that costs a
 fraction of a penny and returns in under a second. No language model is involved in producing a probability.
 
-**Recommendations cite their evidence.** Every factor carries NHS guidance
-for *what* to do, and the systematic reviews behind it for *how much it
-helps* — the number a model would otherwise invent. NHS content is reused
-under the Open Government Licence with the required attribution; the reviews
-come from Europe PMC, which is open and needs no key.
+**It names where the weight sits. It does not tell anyone what to do.**
+A questionnaire is not grounds for a treatment plan — there is no
+examination, no history, usually no bloods. So the report ranks the areas
+carrying the most weight in someone's own picture, attaches the systematic
+reviews showing why those areas matter at all, and says plainly that
+deciding what to change is a conversation for a clinician. Research comes
+from Europe PMC, which is open and needs no key.
 
 **The calling model does the explaining, on its own budget.** Over MCP the
 caller is already a capable model sitting in the person's own subscription,
@@ -178,7 +180,6 @@ export PYTHONPATH=.
 
 cp .env.example .env          # add your keys
 uv run python scripts/check_setup.py --live   # prove they work
-uv run python scripts/check_nhs.py            # probe the NHS content API
 
 uv run python scripts/demo_cli.py --persona heavy_smoker_cvd --agent
 uv run python scripts/demo_cli.py --apple-health ~/Downloads/export.zip --age 34 --sex male --agent

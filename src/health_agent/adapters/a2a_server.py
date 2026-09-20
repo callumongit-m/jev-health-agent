@@ -107,8 +107,8 @@ def _summarise(payload: dict) -> str:
     """A readable fallback when the payload carries a contract, not prose."""
     presentation = payload.get("presentation") or {}
     lines = [presentation.get("headline", "Assessment complete.")]
-    for action in presentation.get("ranked_actions", [])[:3]:
-        lines.append(f"- {action['action']} (~{action['years_recoverable']} years)")
+    for area in presentation.get("ranked_areas", [])[:3]:
+        lines.append(f"- {area['area']} (~{area['years_recoverable']} years)")
     lines += list(presentation.get("must_include_verbatim", []))
     return "\n".join(l for l in lines if l)
 

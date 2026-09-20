@@ -524,7 +524,7 @@ def check_life_expectancy_stability(persona: Persona) -> CheckFn:
             out = _assess(scorer, persona.profile)
             contract = out.get("presentation")
             if contract is not None:
-                actions = contract.get("ranked_actions") or []
+                actions = contract.get("ranked_areas") or []
                 if not actions:
                     return CheckResult(True, "nothing recoverable to compare")
                 values.append(sum(a["years_recoverable"] for a in actions))
@@ -563,17 +563,17 @@ def check_recommendations_grounded(persona: Persona) -> CheckFn:
         # has to come from what the classifier actually found.
         contract = out.get("presentation")
         if contract is not None:
-            actions = contract.get("ranked_actions") or []
+            actions = contract.get("ranked_areas") or []
             if not actions:
-                return CheckResult(False, "contract carried no ranked actions")
-            text = " ".join(a["action"].lower() for a in actions)
+                return CheckResult(False, "contract carried no ranked areas")
+            text = " ".join(a["area"].lower() for a in actions)
             hit = any(
                 FACTORS_BY_KEY[key].label.lower().split()[0] in text
                 or key.split("_")[0] in text
                 for key, _ in top
             )
             return CheckResult(
-                hit, "" if hit else f"actions ignore the top factors {[k for k, _ in top]}"
+                hit, "" if hit else f"areas ignore the top factors {[k for k, _ in top]}"
             )
 
         answer = (out.get("answer") or "").lower()
@@ -698,13 +698,13 @@ def check_years_claimed_do_not_exceed_recoverable(persona: Persona) -> CheckFn:
             # from the calculator, and the caller must be told not to sum
             # them -- that instruction is the only thing standing between
             # overlapping factors and a wildly overstated promise.
-            claimed = [a["years_recoverable"] for a in contract["ranked_actions"]]
+            claimed = [a["years_recoverable"] for a in contract["ranked_areas"]]
             per_factor = set(
                 round(float(v), 2) for v in (le.get("per_factor_years") or {}).values()
             )
             stray = [c for c in claimed if round(float(c), 2) not in per_factor]
             if stray:
-                return CheckResult(False, f"actions quote years not from the calculator: {stray}")
+                return CheckResult(False, f"areas quote years not from the calculator: {stray}")
             warning = " ".join(contract["must_include_verbatim"]).lower()
             if "do not sum" not in warning and "less than" not in warning:
                 return CheckResult(False, "contract does not warn against summing")
@@ -952,16 +952,22 @@ def check_guidance_is_cited(persona: Persona) -> CheckFn:
 
         evidence = contract.get("evidence") or []
         if not evidence:
-            return CheckResult(False, "no sourced guidance attached")
+            return CheckResult(False, "no research attached")
         for entry in evidence:
-            if not entry.get("url", "").startswith("https://"):
-                return CheckResult(False, f"guidance without a source: {entry}")
-            if not entry.get("points"):
-                return CheckResult(False, f"guidance with no content: {entry}")
+            papers = entry.get("research") or []
+            if not papers:
+                return CheckResult(False, f"entry with no research: {entry}")
+            for paper in papers:
+                if not paper.get("url", "").startswith("https://"):
+                    return CheckResult(False, f"paper without a link: {paper}")
+                if not paper.get("cited_by"):
+                    return CheckResult(False, f"uncited paper offered as evidence: {paper}")
 
         forbidden = " ".join(contract.get("must_not") or []).lower()
-        if "invent statistics" not in forbidden:
-            return CheckResult(False, "contract does not forbid invented figures")
+        for rule in ("invent statistics", "turn an area into an instruction",
+                     "research as a recommendation"):
+            if rule not in forbidden:
+                return CheckResult(False, f"contract does not forbid: {rule}")
         return CheckResult(True)
 
     return run

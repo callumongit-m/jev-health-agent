@@ -114,7 +114,7 @@ def test_data_mode_returns_a_contract_and_spends_nothing(scorer):
     out = assess(COMPLETE, scorer=scorer)
     assert out["status"] == "complete"
     assert out.get("answer") is None, "no prose should be generated"
-    assert out["presentation"]["ranked_actions"]
+    assert out["presentation"]["ranked_areas"]
     assert out["risk"]
 
 
@@ -156,20 +156,38 @@ def test_years_recoverable_is_still_offered_because_it_motivates(scorer):
 def test_the_calculator_still_runs_behind_the_contract(scorer):
     """Withholding the figure must not mean losing the per-action years."""
     out = assess(COMPLETE, scorer=scorer)
-    assert any(a["years_recoverable"] > 0 for a in out["presentation"]["ranked_actions"])
+    assert any(a["years_recoverable"] > 0 for a in out["presentation"]["ranked_areas"])
 
 
 # --- cited guidance ----------------------------------------------------
 
-def test_recommendations_carry_sources(scorer):
-    """A recommendation someone will act on should say where it came from."""
+def test_areas_carry_research_not_guidance(scorer):
+    """Fitty shows why an area matters. It does not say what to do about it."""
     out = assess(COMPLETE, scorer=scorer)
     evidence = out["presentation"]["evidence"]
     assert evidence
     for entry in evidence:
-        assert entry["url"].startswith("https://www.nhs.uk/")
-        assert entry["source"] == "NHS"
-        assert entry["points"]
+        assert entry["research"], entry
+        for paper in entry["research"]:
+            assert paper["url"].startswith("https://")
+            assert paper["cited_by"] > 0
+
+
+def test_the_scope_statement_is_always_included(scorer):
+    """The whole posture: a questionnaire locates the weight, it cannot say
+    what to do about it."""
+    out = assess(COMPLETE, scorer=scorer)
+    verbatim = " ".join(out["presentation"]["must_include_verbatim"])
+    assert "not professional medical advice" in verbatim
+    assert "has not examined you" in verbatim
+    assert "conversation to have with a clinician" in verbatim
+
+
+def test_the_contract_forbids_turning_an_area_into_an_instruction(scorer):
+    out = assess(COMPLETE, scorer=scorer)
+    forbidden = " ".join(out["presentation"]["must_not"]).lower()
+    assert "turn an area into an instruction" in forbidden
+    assert "research as a recommendation" in forbidden
 
 
 def test_the_contract_forbids_inventing_statistics(scorer):

@@ -73,9 +73,14 @@ def _privacy_footer(payload: dict[str, Any]) -> dict[str, Any]:
         "YOU write the report. The response returns findings plus a "
         "`presentation` object: include every string in "
         "`must_include_verbatim` as written, follow `must_not`, and build "
-        "the report around `ranked_actions` in the order given. Those "
+        "the report around `ranked_areas` in the order given. Those "
         "sentences are worded the way they are for safety reasons -- "
-        "reproduce them rather than rephrasing them.\n\n" + NOTICE
+        "reproduce them rather than rephrasing them.\n\n"
+        "Fitty names where the weight sits in someone's picture. It does "
+        "not tell them what to do about it, and neither should you -- a "
+        "questionnaire is not grounds for a treatment plan. Say what "
+        "carries weight, cite the research showing the area matters, and "
+        "leave the specifics to a clinician.\n\n" + NOTICE
     ),
 )
 def assess_health(

@@ -94,14 +94,17 @@ def test_markup_is_stripped_from_titles(monkeypatch):
 
 # --- through the report -------------------------------------------------
 
-def test_guidance_carries_the_ogl_attribution():
-    """NHS content is reusable under the Open Government Licence, on
-    condition of attribution. That condition travels with the content."""
-    from health_agent.evidence.corpus import OGL_ATTRIBUTION, for_factor
+def test_the_evidence_layer_carries_no_guidance():
+    """Fitty does not tell people what to do, so there is nothing in the
+    payload that reads like instruction -- only research showing an area
+    matters."""
+    from health_agent.evidence import sources
 
-    entry = for_factor("smoking_burden").as_dict()
-    assert entry["licence"] == OGL_ATTRIBUTION
-    assert "Open Government Licence" in entry["licence"]
+    collected = sources.collect([], ["smoking_burden", "activity_deficit"])
+    assert collected
+    for entry in collected:
+        assert set(entry) == {"factor", "why_it_matters", "research"}
+        assert "not to prescribe" in entry["why_it_matters"]
 
 
 def test_the_contract_separates_advice_from_research():

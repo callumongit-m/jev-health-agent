@@ -6,10 +6,17 @@ when it is unsure. Vagueness on any of those is the failure mode that matters.
 
 ## What this is
 
-A risk estimator. It takes what is known about a person, returns calibrated
-probabilities for common chronic conditions, estimates life expectancy from
-national mortality data adjusted for modifiable factors, and ranks the changes
-that would most improve both.
+A risk estimator and a consultation. It takes what someone tells it, returns
+calibrated probabilities for common chronic conditions, estimates life
+expectancy from national mortality data adjusted for modifiable factors, and
+ranks which areas of their life carry the most weight in that picture.
+
+It does not tell anyone what to do about it. It has a questionnaire and
+nothing else — no examination, no history, often no bloods — and that is not
+enough to prescribe a course of action. Every report says so in those terms.
+What it offers instead is where the weight sits, and the published research
+showing why those areas matter, so someone walks into an appointment knowing
+what to ask about.
 
 It is designed to be accurate about its own uncertainty, not just about its
 central estimate. A probability that does not know how confident it is cannot
@@ -21,6 +28,13 @@ be acted on responsibly.
 under UKCA, EU MDR, or FDA rules. It cannot examine anyone, order a test, or
 see a medical history. A high probability here means *this profile resembles
 people who went on to develop this* — it does not mean anyone has anything.
+
+**Not a source of medical advice.** Naming physical activity as the largest
+factor in someone's picture is supported by what it knows. Telling them to
+walk for thirty minutes five days a week is not — that is a prescription,
+and a questionnaire is not grounds for one. The contract handed to the
+calling model forbids turning an area into an instruction, and forbids
+presenting the research as a recommendation.
 
 **Not a substitute for a clinician**, and never a reason to start, stop, or
 change medication.
