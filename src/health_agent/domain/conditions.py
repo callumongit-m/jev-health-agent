@@ -37,6 +37,11 @@ class FactorSpec:
     #: years of life expectancy lost at the TOP severity level, from published
     #: cohort literature; interpolated linearly by score position.
     max_years_cost: float
+    #: Profile fields this factor is actually about. If none are present the
+    #: classifier is guessing, whatever confidence it reports -- measured
+    #: against real Jev it returned 0.93 for diet on a profile containing
+    #: only age and sex. See `evidence_floor` in results.py.
+    evidence_fields: tuple[str, ...] = ()
 
 
 _HORIZON = "over the next 10 years, absent any change in their behaviour"
@@ -149,6 +154,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "Current heavy smoker, ten a day or more",
         ),
         max_years_cost=10.0,
+        evidence_fields=("smoking_status", "cigarettes_per_day", "years_smoked"),
     ),
     FactorSpec(
         key="adiposity",
@@ -170,6 +176,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "above 35",
         ),
         max_years_cost=8.0,
+        evidence_fields=("waist_cm", "weight_kg", "height_cm"),
     ),
     FactorSpec(
         key="activity_deficit",
@@ -182,6 +189,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "Sedentary, almost no purposeful movement",
         ),
         max_years_cost=5.0,
+        evidence_fields=("moderate_activity_minutes_per_week", "steps_daily_avg"),
     ),
     FactorSpec(
         key="sleep_debt",
@@ -194,6 +202,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "Severe chronic deprivation or badly fragmented sleep",
         ),
         max_years_cost=3.0,
+        evidence_fields=("sleep_hours_avg", "sleep_efficiency_pct"),
     ),
     FactorSpec(
         key="alcohol_burden",
@@ -206,6 +215,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "Heavy intake, above thirty-five units weekly",
         ),
         max_years_cost=5.0,
+        evidence_fields=("alcohol_units_per_week",),
     ),
     FactorSpec(
         key="diet_quality",
@@ -218,6 +228,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "Very poor, largely ultra-processed",
         ),
         max_years_cost=4.0,
+        evidence_fields=("diet_quality_self_rating", "eats_vegetables_daily"),
     ),
     FactorSpec(
         key="stress_load",
@@ -230,6 +241,7 @@ FACTORS: tuple[FactorSpec, ...] = (
             "Severe, with signs of burnout or physiological strain",
         ),
         max_years_cost=2.5,
+        evidence_fields=("perceived_stress_rating",),
     ),
 )
 

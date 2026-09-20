@@ -237,6 +237,30 @@ def _pinned(profile: HealthProfile, field_name: str, value: float) -> HealthProf
         return None
 
 
+#: Markers that measure the same underlying thing. When isolating one, the
+#: others have to be cleared or they pin the condition regardless: on a
+#: 74-year-old with a fasting glucose of 7.1, moving HbA1c across its whole
+#: range shifted type 2 diabetes by only 0.08, because the glucose reading
+#: had already settled the question. That is the model behaving correctly,
+#: and a check that calls it a failure is measuring the test.
+_CO_DOMINANT: dict[tuple[str, str], tuple[str, ...]] = {
+    ("t2d_10yr", "hba1c_mmol_mol"): ("fasting_glucose_mmol_l",),
+    ("t2d_10yr", "fasting_glucose_mmol_l"): ("hba1c_mmol_mol",),
+    ("metabolic_syndrome", "triglycerides_mmol_l"): ("hdl_mmol_l",),
+}
+
+
+def _isolate(profile: HealthProfile, condition: str, field_name: str) -> HealthProfile:
+    """Clear markers that would mask the one being tested."""
+    others = _CO_DOMINANT.get((condition, field_name))
+    if not others:
+        return profile
+    dump = profile.model_dump(exclude=COMPUTED_FIELDS | {"provenance"})
+    for other in others:
+        dump[other] = None
+    return HealthProfile(**dump)
+
+
 def sensitivity_checks(persona: Persona) -> dict[str, CheckFn]:
     """Driving a primary marker from healthy to severe must move the
     probability materially. Monotonicity cannot catch an ignored input --
@@ -249,8 +273,9 @@ def sensitivity_checks(persona: Persona) -> dict[str, CheckFn]:
             extremes = _EXTREMES.get(field_name)
             if extremes is None or getattr(persona.profile, field_name, None) is None:
                 continue
-            healthy = _pinned(persona.profile, field_name, extremes[0])
-            worse = _pinned(persona.profile, field_name, extremes[1])
+            isolated = _isolate(persona.profile, spec.key, field_name)
+            healthy = _pinned(isolated, field_name, extremes[0])
+            worse = _pinned(isolated, field_name, extremes[1])
             if healthy is None or worse is None:
                 continue
 

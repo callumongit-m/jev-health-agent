@@ -41,9 +41,18 @@ class RiskScorer:
             for key in CONDITIONS_BY_KEY
         ]
 
+        known = profile.known_fields()
         factors = []
         for key, spec in FACTORS_BY_KEY.items():
             answer = result.answers[key]
+            # The classifier does not reliably lower its own confidence when
+            # a factor's inputs are missing, so that is decided here from
+            # what the profile actually contains.
+            has_evidence = (
+                any(f in known for f in spec.evidence_fields)
+                if spec.evidence_fields
+                else True
+            )
             factors.append(
                 FactorScore(
                     key=key,
@@ -53,6 +62,7 @@ class RiskScorer:
                     confidence=answer.confidence,
                     level_label=answer.level_label
                     or spec.levels[int(round(answer.value))],
+                    has_evidence=has_evidence,
                 )
             )
 

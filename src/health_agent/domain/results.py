@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from health_agent.domain.conditions import FACTORS_BY_KEY
 
@@ -47,6 +47,15 @@ class ConditionRisk(BaseModel):
         return round(abs(self.probability - 0.5) * 2, 3)
 
 
+#: Most a factor may claim when the profile carries nothing about it.
+#: Measured against real Jev, it returned 0.93 confidence for diet on a
+#: profile containing only age and sex -- a plausible guess reported as
+#: near-certainty. Everything downstream weights by confidence to stop
+#: unmeasured factors deducting years or becoming someone's top priority,
+#: so an unearned confidence quietly defeats all of it.
+NO_EVIDENCE_CEILING = 0.2
+
+
 class FactorScore(BaseModel):
     """One Jev Score answer, interpreted."""
 
@@ -56,6 +65,14 @@ class FactorScore(BaseModel):
     max_level: int = Field(ge=1)
     confidence: float = Field(ge=0.0, le=1.0)
     level_label: str
+    #: whether the profile actually carried any input for this factor
+    has_evidence: bool = True
+
+    @model_validator(mode="after")
+    def _cap_unevidenced_confidence(self) -> "FactorScore":
+        if not self.has_evidence and self.confidence > NO_EVIDENCE_CEILING:
+            object.__setattr__(self, "confidence", NO_EVIDENCE_CEILING)
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property

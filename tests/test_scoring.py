@@ -239,3 +239,50 @@ def test_exported_variable_beats_the_env_file(tmp_path, monkeypatch):
     monkeypatch.setenv("REASONING_MODEL", "from-shell")
     load_dotenv(env, override=False)
     assert os.getenv("REASONING_MODEL") == "from-shell"
+
+
+# --- unearned confidence ------------------------------------------------
+
+def test_a_factor_with_no_inputs_cannot_claim_confidence():
+    """Measured against real Jev: it returned 0.93 confidence for diet on a
+    profile containing only age and sex. Everything downstream weights by
+    confidence to stop unmeasured factors deducting years or becoming
+    someone's top priority, so an unearned confidence defeats all of it."""
+    from health_agent.domain.results import NO_EVIDENCE_CEILING
+
+    bare = HealthProfile(age=45, sex=Sex.MALE)
+    assessment = _scorer().score(bare)
+    for factor in assessment.factors:
+        assert factor.has_evidence is False, factor.key
+        assert factor.confidence <= NO_EVIDENCE_CEILING, factor.key
+
+
+def test_supplying_the_inputs_restores_confidence():
+    profile = HealthProfile(
+        age=45, sex=Sex.MALE, height_cm=180, weight_kg=95,
+        smoking_status=SmokingStatus.CURRENT, cigarettes_per_day=20,
+        diet_quality_self_rating=2,
+    )
+    assessment = _scorer().score(profile)
+    assert assessment.factor("smoking_burden").has_evidence is True
+    assert assessment.factor("adiposity").has_evidence is True
+    # still nothing about their sleep
+    assert assessment.factor("sleep_debt").has_evidence is False
+    assert assessment.factor("sleep_debt").confidence <= 0.2
+
+
+def test_an_unevidenced_factor_cannot_cost_meaningful_years():
+    bare = HealthProfile(age=45, sex=Sex.MALE)
+    assessment = _scorer().score(bare)
+    assert all(f.expected_years_cost < 1.0 for f in assessment.factors)
+
+
+def test_every_factor_declares_what_it_needs():
+    """A factor with no declared inputs is always treated as evidenced, so a
+    new one added without them silently bypasses the cap."""
+    from health_agent.domain.conditions import FACTORS
+
+    for spec in FACTORS:
+        assert spec.evidence_fields, f"{spec.key} declares no evidence_fields"
+        for field in spec.evidence_fields:
+            assert field in HealthProfile.model_fields, f"{spec.key}: {field}"
