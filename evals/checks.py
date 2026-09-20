@@ -565,7 +565,9 @@ def check_recommendations_grounded(persona: Persona) -> CheckFn:
         if contract is not None:
             actions = contract.get("ranked_areas") or []
             if not actions:
-                return CheckResult(False, "contract carried no ranked areas")
+                # Valid: this person has no gaps worth listing. That they
+                # are told so is covered by healthy_told_so.
+                return CheckResult(True, "no areas carrying weight")
             text = " ".join(a["area"].lower() for a in actions)
             hit = any(
                 FACTORS_BY_KEY[key].label.lower().split()[0] in text
@@ -950,9 +952,12 @@ def check_guidance_is_cited(persona: Persona) -> CheckFn:
         if contract is None:
             return CheckResult(True, "narrated mode")
 
+        if not (contract.get("ranked_areas") or []):
+            return CheckResult(True, "no areas to cite research for")
+
         evidence = contract.get("evidence") or []
         if not evidence:
-            return CheckResult(False, "no research attached")
+            return CheckResult(False, "areas listed but no research attached")
         for entry in evidence:
             papers = entry.get("research") or []
             if not papers:
@@ -1088,6 +1093,109 @@ def check_classifier_screen_is_wired() -> CheckFn:
         finally:
             type(backend).classify = original
 
+        return CheckResult(True)
+
+    return run
+
+
+def check_healthy_profiles_are_told_so() -> CheckFn:
+    """Someone whose habits are working should hear that, not be handed a
+    ranked list of near-zero 'areas'.
+
+    Ranking everything by weight regardless of size produced the
+    contradiction of "diet is broadly working in your favour" sitting at
+    the top of a list of things to look at.
+    """
+
+    FIT = {
+        "age": 24, "sex": "male", "height_cm": 180.0, "weight_kg": 74.0,
+        "waist_cm": 79.0, "smoking_status": "never",
+        "alcohol_units_per_week": 2.0,
+        "moderate_activity_minutes_per_week": 300, "sleep_hours_avg": 8.0,
+        "diet_quality_self_rating": 5, "perceived_stress_rating": 1,
+        "on_bp_medication": False, "previously_high_glucose": False,
+        "eats_vegetables_daily": True,
+    }
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, HealthProfile(**FIT))
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+
+        areas = contract.get("ranked_areas") or []
+        if areas:
+            return CheckResult(
+                False, f"listed areas for a profile with no gaps: {areas[0]['area']}"
+            )
+        verbatim = " ".join(contract.get("must_include_verbatim") or []).lower()
+        if "significant weight" not in verbatim:
+            return CheckResult(False, "never told them nothing is carrying weight")
+        return CheckResult(True)
+
+    return run
+
+
+def check_research_follows_the_areas_discussed() -> CheckFn:
+    """Citing smoking reviews at someone who has never smoked is noise
+    dressed as rigour."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, HealthProfile(
+            age=50, sex="male", height_cm=178.0, weight_kg=96.0, waist_cm=106.0,
+            smoking_status="never", alcohol_units_per_week=2.0,
+            moderate_activity_minutes_per_week=30, sleep_hours_avg=6.0,
+            diet_quality_self_rating=2, perceived_stress_rating=3,
+            on_bp_medication=False, previously_high_glucose=False,
+            eats_vegetables_daily=False,
+        ))
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+
+        discussed = {a["area"] for a in contract.get("ranked_areas") or []}
+        cited = {e["factor"] for e in contract.get("evidence") or []}
+        if "smoking_burden" in cited:
+            return CheckResult(
+                False, "cited smoking research at someone who has never smoked"
+            )
+        if cited and not discussed:
+            return CheckResult(False, f"cited research for nothing discussed: {cited}")
+        return CheckResult(True)
+
+    return run
+
+
+def check_one_notion_of_sufficiency() -> CheckFn:
+    """The age-band gate and the actuarial calculator must agree.
+
+    They did not: a fit 21-year-old passed the gate on lifestyle evidence
+    and was then refused a life expectancy by a separate raw classifier
+    threshold. Two notions of "enough" disagreeing about the same person.
+    """
+
+    YOUNG = {
+        "age": 21, "sex": "male", "height_cm": 181.0, "weight_kg": 78.0,
+        "waist_cm": 80.0, "smoking_status": "never",
+        "alcohol_units_per_week": 1.0,
+        "moderate_activity_minutes_per_week": 300, "sleep_hours_avg": 7.5,
+        "diet_quality_self_rating": 4, "perceived_stress_rating": 3,
+        "on_bp_medication": False, "previously_high_glucose": False,
+        "eats_vegetables_daily": True,
+    }
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, HealthProfile(**YOUNG))
+        if out["status"] != "complete":
+            return CheckResult(False, f"gate refused a fit 21-year-old: {out['status']}")
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+        if not contract.get("ask_then_stop"):
+            return CheckResult(
+                False,
+                "passed the gate but could not produce a life expectancy to offer",
+            )
         return CheckResult(True)
 
     return run

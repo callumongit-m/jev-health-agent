@@ -26,11 +26,20 @@ from health_agent.privacy import DISCLAIMER, NOTICE
 
 INSTRUCTIONS = f"""\
 Fitty estimates a person's probability of developing common chronic \
-conditions, their life expectancy, and what would most improve both.
+conditions and shows which areas of their life carry the most weight in \
+that picture, with the published research behind each one.
+
+It is a consultation, not medical advice. It works from a questionnaire -- \
+no examination, no history, often no bloods -- which is enough to say where \
+the weight sits and not enough to tell anyone what to do about it. Report \
+what carries weight; leave what to do about it to a clinician.
 
 Collect what you can conversationally and pass it to `assess_health` -- every \
 field is optional, and the tool will tell you what else it needs rather than \
 guessing. Do not invent values you have not been told.
+
+Life expectancy is calculated but deliberately not returned. The response \
+gives you a question to ask; only call `life_expectancy` if they say yes.
 
 {NOTICE}
 
@@ -56,8 +65,8 @@ def _privacy_footer(payload: dict[str, Any]) -> dict[str, Any]:
     title="Assess health risk",
     description=(
         "Estimate this person's probability of developing common chronic "
-        "conditions, their life expectancy, and the changes that would help "
-        "most.\n\n"
+        "conditions and which areas of their life carry the most weight in "
+        "that picture.\n\n"
         "Measurements accept any unit -- \"5'11\", 13 stone 4, 32in, 5.7%\" "
         "all work. Pass them as the person said them; do not convert, and do "
         "not ask them to.\n\n"

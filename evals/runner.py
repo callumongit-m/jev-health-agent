@@ -177,6 +177,15 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
             ("classifier_screen", "graph", C.check_classifier_screen_is_wired())
         )
         built.append(
+            ("healthy_told_so", "graph", C.check_healthy_profiles_are_told_so())
+        )
+        built.append(
+            ("research_scoped", "graph", C.check_research_follows_the_areas_discussed())
+        )
+        built.append(
+            ("one_sufficiency", "graph", C.check_one_notion_of_sufficiency())
+        )
+        built.append(
             ("asks_age_appropriate", "graph", C.check_asks_only_for_what_the_age_needs())
         )
 

@@ -162,9 +162,14 @@ def build(
         items = [readable.get(f, f) for f in evidence.missing_recommended][:2]
         must.append(f"Getting {' and '.join(items)} would sharpen this materially.")
 
+    # Only genuine gaps get listed. Ranking near-zero factors "by weight"
+    # produces the contradiction of "diet is working in your favour" sitting
+    # at the top of a list of things to look at.
     areas: list[dict[str, Any]] = []
     per_factor = (life_expectancy or {}).get("per_factor_years") or {}
     for factor in assessment.top_factors(4):
+        if factor.severity <= NEEDS_WORK:
+            continue
         years = per_factor.get(factor.key, factor.expected_years_cost)
         if years <= 0.05:
             continue
@@ -177,7 +182,23 @@ def build(
             }
         )
 
-    if life_expectancy:
+    if not areas:
+        # For someone whose habits are already working, this is the honest
+        # and genuinely useful answer -- and it is the one a report built
+        # around "here are your problems" will not give.
+        strengths = [
+            f.label.lower() for f in assessment.factors if f.severity <= 0.15
+        ][:4]
+        must.append(
+            "Nothing in the lifestyle picture is carrying significant weight "
+            + (f"-- {', '.join(strengths)} are all working in your favour. "
+               if strengths else "-- these habits are working in your favour. ")
+            + "What is left in the risk numbers comes from age, family "
+            "history and anything not measured, rather than from anything "
+            "being done wrong."
+        )
+
+    if life_expectancy and areas:
         total = life_expectancy.get("years_recoverable")
         must.append(
             f"About {total} years look recoverable in total. That is less "

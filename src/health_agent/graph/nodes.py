@@ -216,7 +216,7 @@ def make_nodes(scorer: RiskScorer):
 
         assessment = state["assessment"]
         profile = state["profile"]
-        life = estimate(assessment, profile)
+        life = estimate(assessment, profile, state["evidence"])
         life_dict = life.as_dict() if life else None
 
         # Published guidance for what the report will actually discuss, so
@@ -225,7 +225,11 @@ def make_nodes(scorer: RiskScorer):
 
         guidance = sources.collect(
             [c.key for c in assessment.top_conditions(3)],
-            [f.key for f in assessment.top_factors(3)],
+            [
+                f.key
+                for f in assessment.top_factors(3)
+                if f.severity > presentation_rules.NEEDS_WORK
+            ],
         )
 
         contract = presentation_rules.build(
@@ -235,6 +239,7 @@ def make_nodes(scorer: RiskScorer):
             state.get("urgent_guidance"),
             guidance=guidance,
         )
+
         return {
             "status": "complete",
             # held back from the payload -- see LIFE_EXPECTANCY_OFFER. The

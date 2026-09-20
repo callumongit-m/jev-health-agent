@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass
+from typing import Any
 
 from health_agent.domain.profile import HealthProfile, Sex
 from health_agent.domain.results import RiskAssessment
@@ -40,9 +41,10 @@ SATURATION_YEARS = 15.0
 #: remaining baseline. Guards against absurd outputs at older ages.
 MAX_DEDUCTION_FRACTION = 0.55
 
-#: Below this data sufficiency there is no honest estimate to give. The graph
-#: gates on the same signal, but refusing here too means the calculator cannot
-#: be misused standalone to turn an empty profile into a number.
+#: Standalone guard, for when the calculator is called without an evidence
+#: assessment. The graph does its own age-aware check and passes the result
+#: in; this only stops the calculator being misused on its own to turn an
+#: empty profile into a number.
 MIN_SUFFICIENCY = 0.5
 
 
@@ -109,13 +111,24 @@ def _saturate(raw_years: float) -> float:
 
 
 def estimate(
-    assessment: RiskAssessment, profile: HealthProfile
+    assessment: RiskAssessment,
+    profile: HealthProfile,
+    evidence: Any = None,
 ) -> LifeExpectancyEstimate | None:
     """None when there is no honest estimate: no age means no baseline, and
-    thin data means any number would be invented rather than derived."""
+    thin data means any number would be invented rather than derived.
+
+    When an `Evidence` assessment is supplied it decides, because it is
+    age-aware and the raw classifier signal is not. Without that, a fit
+    21-year-old passes the graph's gate and is then refused here -- two
+    notions of "enough" disagreeing about the same person.
+    """
     if profile.age is None:
         return None
-    if assessment.data_sufficiency < MIN_SUFFICIENCY:
+    if evidence is not None:
+        if not evidence.sufficient:
+            return None
+    elif assessment.data_sufficiency < MIN_SUFFICIENCY:
         return None
 
     baseline = baseline_remaining_years(profile.age, profile.sex)
