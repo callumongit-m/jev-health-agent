@@ -212,6 +212,7 @@ def make_nodes(scorer: RiskScorer):
         nothing.
         """
         from health_agent.domain import presentation as presentation_rules
+        from health_agent.domain import projection as projection_rules
         from health_agent.scoring.actuarial import estimate
 
         assessment = state["assessment"]
@@ -232,12 +233,18 @@ def make_nodes(scorer: RiskScorer):
             ],
         )
 
+        # Where the numbers land if nothing changes. One classifier call
+        # per decade, run concurrently, which is only affordable because
+        # the classifier is cheap.
+        projection = projection_rules.build(profile, scorer)
+
         contract = presentation_rules.build(
             assessment,
             state["evidence"],
             life_dict,
             state.get("urgent_guidance"),
             guidance=guidance,
+            projection=projection.as_dict() if projection else None,
         )
 
         return {

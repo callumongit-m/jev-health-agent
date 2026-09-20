@@ -145,6 +145,14 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                  C.check_guidance_is_cited(persona))
             )
             built.append(
+                (f"table_and_chart[{persona.id}]", "graph",
+                 C.check_table_and_projection_reach_the_host(persona))
+            )
+            built.append(
+                (f"projection_accumulates[{persona.id}]", "graph",
+                 C.check_projection_only_accumulates(persona))
+            )
+            built.append(
                 (f"rec_grounding[{persona.id}]", "graph",
                  C.check_recommendations_grounded(persona))
             )

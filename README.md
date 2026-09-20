@@ -130,6 +130,30 @@ confidence and saturated to account for overlap. The language model chooses
 and explains; the arithmetic is deterministic, so the same profile always
 gives the same number.
 
+## The host renders the UI
+
+There is no interface, so the calling model is the interface. The contract
+hands it finished components rather than instructions to build them:
+
+- **`risk_table`** — every condition with its probability, band and
+  certainty, as rows. Supplied as data because a figure recomputed in prose
+  is a figure that drifts.
+- **`projection`** — cumulative risk by age if nothing changes, one series
+  per condition, ready to plot. The classifier answers a *ten-year*
+  question, so asking it again at an older age produces a flat line that
+  says nothing; composing successive decades survival-style is what turns
+  it into the actual story. For a fit 21-year-old with diabetes in the
+  family, a 21% decade risk compounds to 81% by 81.
+
+That costs one classifier call per decade, run concurrently — about a
+second, and affordable only because the classifier is cheap. The same sweep
+on a language model would be slow and pointless.
+
+The assumptions travel with the curve and the contract requires them to be
+shown: it assumes nothing changes, treats decades as independent, and
+ignores competing mortality. Each is a reason the line overstates, and a
+rising line someone cannot contextualise is just frightening.
+
 ## Two front doors
 
 **MCP** — the one people will use. A remote MCP server URL pasted into

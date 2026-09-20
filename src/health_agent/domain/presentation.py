@@ -36,6 +36,8 @@ class Presentation:
     framing: dict[str, str]
     offer: str | None = None
     evidence: tuple[dict[str, Any], ...] = ()
+    risk_table: tuple[dict[str, Any], ...] = ()
+    projection: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         payload = {
@@ -49,6 +51,14 @@ class Presentation:
             payload["ask_then_stop"] = self.offer
         if self.evidence:
             payload["evidence"] = list(self.evidence)
+        if self.risk_table:
+            payload["risk_table"] = {
+                "render_as": "markdown table, exactly these rows and columns",
+                "columns": ["Condition", "Probability", "Band", "Certainty"],
+                "rows": list(self.risk_table),
+            }
+        if self.projection:
+            payload["projection"] = self.projection
         return payload
 
 
@@ -127,6 +137,7 @@ def build(
     life_expectancy: dict[str, Any] | None,
     urgent_guidance: str | None = None,
     guidance: list[dict[str, Any]] | None = None,
+    projection: dict[str, Any] | None = None,
 ) -> Presentation:
     top = assessment.top_conditions(3)
     must: list[str] = []
@@ -210,8 +221,29 @@ def build(
 
     offer = LIFE_EXPECTANCY_OFFER if life_expectancy else None
 
+    # A table beats prose for seven numbers, and the host can render one.
+    # Supplying the rows rather than the instruction means the figures
+    # cannot drift in the retelling.
+    table = tuple(
+        {
+            "Condition": c.label,
+            # round once, from the same value the payload carries -- going
+            # straight from the raw float puts 0.51499 at 51% here and 52%
+            # there
+            "Probability": f"{round(c.probability, 4):.0%}",
+            "Band": str(c.band).replace("_", " "),
+            "Certainty": (
+                f"{min(c.certainty, evidence.confidence_ceiling):.2f}"
+                + (" (capped)" if c.certainty > evidence.confidence_ceiling else "")
+            ),
+        }
+        for c in sorted(assessment.conditions, key=lambda x: -x.probability)
+    )
+
     return Presentation(
         headline=headline,
+        risk_table=table,
+        projection=projection,
         must_include=tuple(must),
         must_not=(
             "Do not state a life expectancy, an age at death, or years "
@@ -229,6 +261,12 @@ def build(
             "what-to-do-about-it to a clinician.",
             "Do not present the research as a recommendation. It shows the "
             "area matters; it does not say what this person should do.",
+            "Do not invent, extend or smooth points on the projection. It is "
+            "composed from decade-by-decade estimates; anything between or "
+            "beyond them is not data.",
+            "Do not describe the projection as what will happen. It is what "
+            "the numbers compound to if nothing at all changes, which is "
+            "never quite the case.",
             "Do not state a probability that is not in `risk`, and do not "
             "round one into a stronger claim than it makes.",
             "Do not present a capped certainty as settled -- check "
@@ -248,9 +286,23 @@ def build(
         framing={
             "tone": "Direct and specific. This is someone's health, not a "
                     "sales page -- no false reassurance, no alarmism.",
-            "order": "Urgent triage first if present, then what stands out "
-                     "and why, then the areas by weight, then the caveats, "
-                     "and end by asking the `ask_then_stop` question.",
+            "order": "Urgent triage first if present, then the `risk_table` "
+                     "as a markdown table, then the `projection` as a line "
+                     "chart, then what stands out and why, then the areas by "
+                     "weight, then the caveats, and end by asking the "
+                     "`ask_then_stop` question.",
+            "risk_table": "Render `risk_table.rows` as a markdown table with "
+                          "exactly the given columns. Do not recalculate, "
+                          "reorder or round the figures.",
+            "projection": "Render `projection.series` as a line chart -- age "
+                          "on the x axis, cumulative probability on the y, "
+                          "one line per condition using `projection.labels`. "
+                          "If you cannot draw a chart, give it as a table "
+                          "instead. Plot only the points supplied; do not "
+                          "interpolate, extend or smooth. State every item "
+                          "in `projection.assumptions` beneath it -- the "
+                          "curve overstates without them, and a rising line "
+                          "someone cannot contextualise is just frightening.",
             "length": "Aim for something readable in under two minutes.",
             "ask_then_stop": "Put this question at the very end and stop "
                              "there. Do not answer it yourself, do not hint "

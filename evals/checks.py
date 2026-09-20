@@ -1199,3 +1199,67 @@ def check_one_notion_of_sufficiency() -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_table_and_projection_reach_the_host(persona: Persona) -> CheckFn:
+    """The host renders the UI, so the figures it renders have to arrive as
+    data rather than as an instruction to recompute them."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+
+        table = contract.get("risk_table")
+        if not table or not table.get("rows"):
+            return CheckResult(False, "no risk table supplied")
+        if len(table["rows"]) != len(out["risk"]):
+            return CheckResult(
+                False,
+                f"table has {len(table['rows'])} rows for {len(out['risk'])} conditions",
+            )
+        by_label = {v["label"]: v for v in out["risk"].values()}
+        for row in table["rows"]:
+            expected = by_label.get(row["Condition"])
+            if expected is None:
+                return CheckResult(False, f"table row for unknown {row['Condition']!r}")
+            if row["Probability"] != f"{expected['probability']:.0%}":
+                return CheckResult(
+                    False,
+                    f"{row['Condition']}: table says {row['Probability']}, "
+                    f"risk says {expected['probability']:.0%}",
+                )
+
+        projection = contract.get("projection")
+        if persona.profile.age is None or persona.profile.age > 80:
+            return CheckResult(True, "too near the end of the table to project")
+        if not projection:
+            return CheckResult(False, "no projection supplied")
+        if not projection.get("assumptions"):
+            return CheckResult(False, "projection without its assumptions")
+        return CheckResult(True)
+
+    return run
+
+
+def check_projection_only_accumulates(persona: Persona) -> CheckFn:
+    """Cumulative risk is the chance of having developed something by an
+    age. It cannot fall as the age rises, and a chart that dips would say
+    something untrue about getting better by doing nothing."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        projection = (out.get("presentation") or {}).get("projection")
+        if not projection:
+            return CheckResult(True, "no projection for this profile")
+
+        for key, points in projection["series"].items():
+            values = [p["probability"] for p in points]
+            if values != sorted(values):
+                return CheckResult(False, f"{key} falls over time: {values}")
+            if values and values[-1] > 1.0:
+                return CheckResult(False, f"{key} exceeds certainty: {values[-1]}")
+        return CheckResult(True)
+
+    return run
