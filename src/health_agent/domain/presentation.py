@@ -34,15 +34,31 @@ class Presentation:
     must_not: tuple[str, ...]
     ranked_actions: tuple[dict[str, Any], ...]
     framing: dict[str, str]
+    offer: str | None = None
+    evidence: tuple[dict[str, Any], ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "headline": self.headline,
             "must_include_verbatim": list(self.must_include),
             "must_not": list(self.must_not),
             "ranked_actions": list(self.ranked_actions),
             "framing": self.framing,
         }
+        if self.offer:
+            payload["ask_then_stop"] = self.offer
+        if self.evidence:
+            payload["evidence"] = list(self.evidence)
+        return payload
+
+
+#: Life expectancy is the one output nobody should receive unasked. Some
+#: people want the number and act on it; for others it lands as a death
+#: sentence they did not request. So it is offered, and only produced if
+#: they say yes.
+LIFE_EXPECTANCY_OFFER = (
+    "Would you like to know your life expectancy, calculated from your data?"
+)
 
 
 #: Phrasings per factor, as (already-doing-well, needs-work). Telling a former
@@ -101,6 +117,7 @@ def build(
     evidence: Evidence,
     life_expectancy: dict[str, Any] | None,
     urgent_guidance: str | None = None,
+    guidance: list[dict[str, Any]] | None = None,
 ) -> Presentation:
     top = assessment.top_conditions(3)
     must: list[str] = []
@@ -161,10 +178,16 @@ def build(
 
     must += [DISCLAIMER, NOTICE]
 
+    offer = LIFE_EXPECTANCY_OFFER if life_expectancy else None
+
     return Presentation(
         headline=headline,
         must_include=tuple(must),
         must_not=(
+            "Do not state a life expectancy, an age at death, or years "
+            "remaining. Ask the `ask_then_stop` question instead and wait. "
+            "Some people want that number; for others it arrives as a death "
+            "sentence they did not ask for.",
             "Do not name a condition the person might have based on symptoms. "
             "Relay the urgency and what to tell a clinician, and stop there.",
             "Do not add up the per-action year figures. They overlap; the "
@@ -174,13 +197,27 @@ def build(
             "Do not present a capped certainty as settled -- check "
             "`certainty_capped_by_evidence`.",
             "Do not recommend starting, stopping or changing any medication.",
+            "Where `evidence` covers a point you are making, cite it with "
+            "its source and link rather than asserting the fact yourself. "
+            "Do not invent statistics, effect sizes or guideline numbers "
+            "that are not in `evidence`.",
         ),
         ranked_actions=tuple(actions),
         framing={
             "tone": "Direct and specific. This is someone's health, not a "
                     "sales page -- no false reassurance, no alarmism.",
             "order": "Urgent triage first if present, then what stands out "
-                     "and why, then the ranked actions, then the caveats.",
+                     "and why, then the ranked actions, then the caveats, "
+                     "and end by asking the `ask_then_stop` question.",
             "length": "Aim for something readable in under two minutes.",
+            "ask_then_stop": "Put this question at the very end and stop "
+                             "there. Do not answer it yourself, do not hint "
+                             "at the figure, and do not mention a life "
+                             "expectancy, an age, or years remaining "
+                             "anywhere in this reply. If they say yes, call "
+                             "`life_expectancy`. If they say no, drop it and "
+                             "never raise it again.",
         },
+        offer=offer,
+        evidence=tuple(guidance or ()),
     )

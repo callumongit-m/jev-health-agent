@@ -206,6 +206,22 @@ _EXTREMES: dict[str, tuple[float, float]] = {
 }
 
 
+def _already_better_than(profile: HealthProfile, field_name: str) -> bool:
+    """True when the person is already past the healthy pin for this field.
+
+    Pinning a 58kg athlete to the 62kg "healthy" weight makes her heavier,
+    so the improvement check would be measuring a worsening and calling it
+    a regression. There is no improvement to test, so skip.
+    """
+    extremes = _EXTREMES.get(field_name)
+    current = getattr(profile, field_name, None)
+    if extremes is None or current is None:
+        return False
+    healthy, severe = extremes
+    lower_is_better = healthy < severe
+    return current <= healthy if lower_is_better else current >= healthy
+
+
 def _pinned(profile: HealthProfile, field_name: str, value: float) -> HealthProfile | None:
     ge, le, is_int = _bounds(field_name)
     if ge is not None:
@@ -257,6 +273,51 @@ def sensitivity_checks(persona: Persona) -> dict[str, CheckFn]:
                 return CheckResult(True)
 
             checks[f"sensitivity[{spec.key}/{field_name}]"] = run
+    return checks
+
+
+def improvement_checks(persona: Persona) -> dict[str, CheckFn]:
+    """Improving a driver must not raise the condition it drives.
+
+    Monotonicity only ever tests the worsening direction: push a driver
+    toward bad and check the probability does not fall. That leaves the
+    direction every recommendation depends on completely untested, and a
+    counterfactual sweep found the consequence -- tripling someone's
+    exercise came back with their diabetes risk slightly *up*.
+
+    A recommendation engine that cannot show improvement improves things is
+    not a recommendation engine, so this is the check that matters most for
+    what Fitty is actually for.
+    """
+    checks: dict[str, CheckFn] = {}
+    for spec in CONDITIONS:
+        for field_name, direction in spec.worsens_with.items():
+            extremes = _EXTREMES.get(field_name)
+            if extremes is None or getattr(persona.profile, field_name, None) is None:
+                continue
+            if _already_better_than(persona.profile, field_name):
+                continue  # nothing to improve; see _already_better_than
+            healthy = _pinned(persona.profile, field_name, extremes[0])
+            if healthy is None:
+                continue
+
+            def run(
+                scorer: RiskScorer, *, key=spec.key, healthy=healthy, field=field_name
+            ) -> CheckResult:
+                n = SAMPLES
+                current = _mean_probability(scorer, persona.profile, key, n)
+                improved = _mean_probability(scorer, healthy, key, n)
+                tolerance = _tolerance(scorer) / n**0.5
+                if improved > current + tolerance:
+                    return CheckResult(
+                        False,
+                        f"improving {field} raised {key}: "
+                        f"{current:.3f} -> {improved:.3f} "
+                        f"(rose {improved - current:+.3f}, tolerance {tolerance:.3f})",
+                    )
+                return CheckResult(True)
+
+            checks[f"improvement[{spec.key}/{field_name}]"] = run
     return checks
 
 
@@ -425,12 +486,24 @@ def check_privacy_in_payload(persona: Persona) -> CheckFn:
 
 
 def check_life_expectancy_stability(persona: Persona) -> CheckFn:
-    """The flagged concern, measured: is the number reproducible?"""
+    """The flagged concern, measured: is the number reproducible?
+
+    The mortality figure is withheld from the payload now -- it is offered,
+    not volunteered -- so this measures the years the contract *does* expose.
+    They come from the same calculator, so they move together.
+    """
 
     def run(scorer: RiskScorer) -> CheckResult:
         values = []
         for _ in range(3):
             out = _assess(scorer, persona.profile)
+            contract = out.get("presentation")
+            if contract is not None:
+                actions = contract.get("ranked_actions") or []
+                if not actions:
+                    return CheckResult(True, "nothing recoverable to compare")
+                values.append(sum(a["years_recoverable"] for a in actions))
+                continue
             le = (out.get("life_expectancy") or {}).get("adjusted_remaining_years")
             if le is None:
                 return CheckResult(False, "no life expectancy produced")
@@ -798,6 +871,72 @@ def check_contract_carries_its_guarantees(persona: Persona) -> CheckFn:
         absent = [v for v in REQUIRED_VERBATIM if v not in verbatim]
         if absent:
             return CheckResult(False, f"contract dropped required wording: {absent}")
+        return CheckResult(True)
+
+    return run
+
+
+def check_life_expectancy_is_never_volunteered(persona: Persona) -> CheckFn:
+    """Nobody should be handed their own mortality estimate unasked.
+
+    Some people want the number and act on it; for others it arrives as a
+    death sentence they did not request. So it is offered, and the payload
+    must carry neither the figure nor anything that gives it away.
+    """
+
+    import json as _json
+
+    LEAKS = (
+        "adjusted_remaining_years",
+        "baseline_remaining_years",
+        "estimated_age_at_death",
+        "years_lost",
+    )
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+
+        if "life_expectancy" in out:
+            return CheckResult(False, "life expectancy sent without being asked for")
+
+        blob = _json.dumps(out).lower()
+        leaked = [k for k in LEAKS if k.replace("_", " ") in blob or k in blob]
+        if leaked:
+            return CheckResult(False, f"payload leaks {leaked}")
+
+        offer = contract.get("ask_then_stop") or ""
+        if "would you like" not in offer.lower():
+            return CheckResult(False, f"no offer made: {offer!r}")
+        return CheckResult(True)
+
+    return run
+
+
+def check_guidance_is_cited(persona: Persona) -> CheckFn:
+    """A recommendation someone will act on should say where it came from,
+    and the contract must forbid inventing figures that are not in it."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+
+        evidence = contract.get("evidence") or []
+        if not evidence:
+            return CheckResult(False, "no sourced guidance attached")
+        for entry in evidence:
+            if not entry.get("url", "").startswith("https://"):
+                return CheckResult(False, f"guidance without a source: {entry}")
+            if not entry.get("points"):
+                return CheckResult(False, f"guidance with no content: {entry}")
+
+        forbidden = " ".join(contract.get("must_not") or []).lower()
+        if "invent statistics" not in forbidden:
+            return CheckResult(False, "contract does not forbid invented figures")
         return CheckResult(True)
 
     return run

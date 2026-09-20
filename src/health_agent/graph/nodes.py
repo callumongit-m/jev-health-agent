@@ -159,15 +159,28 @@ def make_nodes(scorer: RiskScorer):
         life = estimate(assessment, profile)
         life_dict = life.as_dict() if life else None
 
+        # Published guidance for what the report will actually discuss, so
+        # recommendations can be cited rather than asserted.
+        from health_agent.evidence import sources
+
+        guidance = sources.collect(
+            [c.key for c in assessment.top_conditions(3)],
+            [f.key for f in assessment.top_factors(3)],
+        )
+
         contract = presentation_rules.build(
             assessment,
             state["evidence"],
             life_dict,
             state.get("urgent_guidance"),
+            guidance=guidance,
         )
         return {
             "status": "complete",
-            "life_expectancy": life_dict,
+            # held back from the payload -- see LIFE_EXPECTANCY_OFFER. The
+            # calculator still runs, because the per-action years come from
+            # it; only the mortality figure is withheld until asked for.
+            "life_expectancy_private": life_dict,
             "presentation": contract.as_dict(),
             "answer": None,
         }

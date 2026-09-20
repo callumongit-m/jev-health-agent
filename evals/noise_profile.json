@@ -1,0 +1,126 @@
+{
+  "backend": "openrouter:~typesafe/jev-latest",
+  "repeats": 30,
+  "profiles": [
+    "lean_young_healthy",
+    "mid_metabolic_risk",
+    "heavy_smoker_cvd"
+  ],
+  "median_sd": 0.0065,
+  "p95_sd": 0.0114,
+  "worst_sd": 0.0127,
+  "noisiest_condition": "cvd_10yr",
+  "per_profile": {
+    "lean_young_healthy": {
+      "t2d_10yr": {
+        "mean": 0.0473,
+        "sd": 0.0044,
+        "spread": 0.01
+      },
+      "cvd_10yr": {
+        "mean": 0.037,
+        "sd": 0.0046,
+        "spread": 0.01
+      },
+      "hypertension": {
+        "mean": 0.1067,
+        "sd": 0.006,
+        "spread": 0.03
+      },
+      "metabolic_syndrome": {
+        "mean": 0.025,
+        "sd": 0.005,
+        "spread": 0.01
+      },
+      "sleep_apnoea": {
+        "mean": 0.0833,
+        "sd": 0.0047,
+        "spread": 0.01
+      },
+      "nafld": {
+        "mean": 0.0637,
+        "sd": 0.0055,
+        "spread": 0.02
+      },
+      "ckd": {
+        "mean": 0.0213,
+        "sd": 0.0034,
+        "spread": 0.01
+      }
+    },
+    "mid_metabolic_risk": {
+      "t2d_10yr": {
+        "mean": 0.737,
+        "sd": 0.0116,
+        "spread": 0.04
+      },
+      "cvd_10yr": {
+        "mean": 0.4283,
+        "sd": 0.0127,
+        "spread": 0.05
+      },
+      "hypertension": {
+        "mean": 0.9637,
+        "sd": 0.0048,
+        "spread": 0.01
+      },
+      "metabolic_syndrome": {
+        "mean": 0.9597,
+        "sd": 0.0041,
+        "spread": 0.02
+      },
+      "sleep_apnoea": {
+        "mean": 0.52,
+        "sd": 0.0089,
+        "spread": 0.04
+      },
+      "nafld": {
+        "mean": 0.8233,
+        "sd": 0.0065,
+        "spread": 0.03
+      },
+      "ckd": {
+        "mean": 0.313,
+        "sd": 0.01,
+        "spread": 0.05
+      }
+    },
+    "heavy_smoker_cvd": {
+      "t2d_10yr": {
+        "mean": 0.366,
+        "sd": 0.0114,
+        "spread": 0.06
+      },
+      "cvd_10yr": {
+        "mean": 0.6307,
+        "sd": 0.0109,
+        "spread": 0.05
+      },
+      "hypertension": {
+        "mean": 0.97,
+        "sd": 0.0,
+        "spread": 0.0
+      },
+      "metabolic_syndrome": {
+        "mean": 0.9067,
+        "sd": 0.0083,
+        "spread": 0.03
+      },
+      "sleep_apnoea": {
+        "mean": 0.471,
+        "sd": 0.007,
+        "spread": 0.03
+      },
+      "nafld": {
+        "mean": 0.6103,
+        "sd": 0.0102,
+        "spread": 0.03
+      },
+      "ckd": {
+        "mean": 0.3543,
+        "sd": 0.0092,
+        "spread": 0.04
+      }
+    }
+  }
+}

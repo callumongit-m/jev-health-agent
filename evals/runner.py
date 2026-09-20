@@ -89,6 +89,8 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                 built.append((f"{name}[{persona.id}]", "jev", fn))
             for name, fn in C.sensitivity_checks(persona).items():
                 built.append((f"{name}[{persona.id}]", "jev", fn))
+            for name, fn in C.improvement_checks(persona).items():
+                built.append((f"{name}[{persona.id}]", "jev", fn))
 
         for higher, lower, condition in load_orderings():
             built.append(
@@ -133,6 +135,14 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
             built.append(
                 (f"le_stability[{persona.id}]", "graph",
                  C.check_life_expectancy_stability(persona))
+            )
+            built.append(
+                (f"le_never_volunteered[{persona.id}]", "graph",
+                 C.check_life_expectancy_is_never_volunteered(persona))
+            )
+            built.append(
+                (f"guidance_cited[{persona.id}]", "graph",
+                 C.check_guidance_is_cited(persona))
             )
             built.append(
                 (f"rec_grounding[{persona.id}]", "graph",

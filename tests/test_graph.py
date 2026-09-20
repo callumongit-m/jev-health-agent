@@ -1,5 +1,7 @@
 """Graph routing: the three terminal states and the tool cycle."""
 
+import json
+
 import pytest
 
 from health_agent.adapters.core import assess
@@ -46,14 +48,14 @@ def test_complete_profile_reaches_a_scored_answer(scorer, narrated):
     assert out["answer"]
 
 
-def test_life_expectancy_comes_from_the_tool_not_the_prose(scorer):
+def test_life_expectancy_comes_from_the_tool_not_the_prose(scorer, narrated):
     out = assess(COMPLETE, scorer=scorer)
     le = out["life_expectancy"]
     assert le["adjusted_remaining_years"] < le["baseline_remaining_years"]
     assert "ONS national life table" in le["method"]
 
 
-def test_identical_input_gives_identical_life_expectancy(scorer):
+def test_identical_input_gives_identical_life_expectancy(scorer, narrated):
     """The reason the LLM is handed a calculator instead of doing the maths."""
     first = assess(COMPLETE, scorer=scorer)["life_expectancy"]
     second = assess(COMPLETE, scorer=scorer)["life_expectancy"]
@@ -113,15 +115,68 @@ def test_data_mode_returns_a_contract_and_spends_nothing(scorer):
     assert out["status"] == "complete"
     assert out.get("answer") is None, "no prose should be generated"
     assert out["presentation"]["ranked_actions"]
-    assert out["risk"] and out["life_expectancy"]
+    assert out["risk"]
 
 
-def test_life_expectancy_is_still_computed_without_an_llm(scorer):
-    """The calculator is ours; only the writing is delegated."""
+# --- life expectancy is offered, never volunteered ---------------------
+
+def test_life_expectancy_is_withheld_until_asked_for(scorer):
+    """Some people want that number and act on it. For others it lands as a
+    death sentence they did not request, so it is never sent unasked."""
     out = assess(COMPLETE, scorer=scorer)
-    le = out["life_expectancy"]
-    assert le["adjusted_remaining_years"] < le["baseline_remaining_years"]
-    assert "ONS national life table" in le["method"]
+    assert "life_expectancy" not in out
+    contract = out["presentation"]
+    assert contract["ask_then_stop"].startswith("Would you like to know")
+
+    blob = json.dumps(contract).lower()
+    for leaked in ("remaining_years", "age_at_death", "life expectancy you",
+                   "you will live"):
+        assert leaked not in blob, f"contract leaked {leaked!r}"
+
+
+def test_the_contract_forbids_volunteering_it(scorer):
+    out = assess(COMPLETE, scorer=scorer)
+    forbidden = " ".join(out["presentation"]["must_not"]).lower()
+    assert "life expectancy" in forbidden and "age at death" in forbidden
+    assert "wait" in forbidden, "must_not should say to wait for an answer"
+
+    framing = out["presentation"]["framing"]["ask_then_stop"].lower()
+    assert "do not answer it yourself" in framing
+    assert "stop there" in framing
+
+
+def test_years_recoverable_is_still_offered_because_it_motivates(scorer):
+    """Recoverable years are the actionable half and are not a mortality
+    figure, so they are not withheld."""
+    out = assess(COMPLETE, scorer=scorer)
+    verbatim = " ".join(out["presentation"]["must_include_verbatim"])
+    assert "recoverable" in verbatim
+
+
+def test_the_calculator_still_runs_behind_the_contract(scorer):
+    """Withholding the figure must not mean losing the per-action years."""
+    out = assess(COMPLETE, scorer=scorer)
+    assert any(a["years_recoverable"] > 0 for a in out["presentation"]["ranked_actions"])
+
+
+# --- cited guidance ----------------------------------------------------
+
+def test_recommendations_carry_sources(scorer):
+    """A recommendation someone will act on should say where it came from."""
+    out = assess(COMPLETE, scorer=scorer)
+    evidence = out["presentation"]["evidence"]
+    assert evidence
+    for entry in evidence:
+        assert entry["url"].startswith("https://www.nhs.uk/")
+        assert entry["source"] == "NHS"
+        assert entry["points"]
+
+
+def test_the_contract_forbids_inventing_statistics(scorer):
+    out = assess(COMPLETE, scorer=scorer)
+    forbidden = " ".join(out["presentation"]["must_not"]).lower()
+    assert "invent statistics" in forbidden
+    assert "cite it" in forbidden
 
 
 def test_contract_supplies_the_safety_critical_wording_verbatim(scorer):

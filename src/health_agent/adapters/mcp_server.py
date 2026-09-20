@@ -122,6 +122,79 @@ def assess_health(
 
 
 @server.tool(
+    name="life_expectancy",
+    title="Life expectancy, if they asked for it",
+    description=(
+        "Call this ONLY after the person has been asked whether they want "
+        "their life expectancy and has said yes. `assess_health` deliberately "
+        "withholds it and gives you the question to ask.\n\n"
+        "Some people want that number and act on it; for others it arrives "
+        "as a death sentence they did not request, so it is never volunteered."
+        "\n\nPass the same details you gave `assess_health`. Returns the "
+        "national baseline, the adjusted estimate, what is driving the gap, "
+        "and how much of it looks recoverable.\n\n" + NOTICE
+    ),
+)
+def life_expectancy(
+    age: Annotated[int, Field(ge=0, le=120)],
+    sex: Annotated[Literal["male", "female", "other"] | None, Field(None)] = None,
+    height_cm: Annotated[str | float | None, Field(None)] = None,
+    weight_kg: Annotated[str | float | None, Field(None)] = None,
+    waist_cm: Annotated[str | float | None, Field(None)] = None,
+    smoking_status: Annotated[Literal["never", "former", "current"] | None, Field(None)] = None,
+    cigarettes_per_day: Annotated[int | None, Field(None, ge=0, le=100)] = None,
+    alcohol_units_per_week: Annotated[float | None, Field(None, ge=0, le=200)] = None,
+    moderate_activity_minutes_per_week: Annotated[int | None, Field(None, ge=0, le=5000)] = None,
+    sleep_hours_avg: Annotated[float | None, Field(None, ge=0, le=24)] = None,
+    diet_quality_self_rating: Annotated[int | None, Field(None, ge=1, le=5)] = None,
+    perceived_stress_rating: Annotated[int | None, Field(None, ge=1, le=5)] = None,
+    systolic_bp: Annotated[int | None, Field(None, ge=50, le=300)] = None,
+    diastolic_bp: Annotated[int | None, Field(None, ge=30, le=200)] = None,
+    hba1c_mmol_mol: Annotated[str | float | None, Field(None)] = None,
+    on_bp_medication: Annotated[bool | None, Field(None)] = None,
+    previously_high_glucose: Annotated[bool | None, Field(None)] = None,
+    eats_vegetables_daily: Annotated[bool | None, Field(None)] = None,
+) -> dict[str, Any]:
+    from health_agent.domain.profile import HealthProfile
+    from health_agent.domain.units import normalise
+    from health_agent.scoring.actuarial import estimate
+    from health_agent.scoring.backend import get_backend
+    from health_agent.scoring.scorer import RiskScorer
+
+    fields = {k: v for k, v in locals().items() if v is not None and k != "Any"}
+    clean, conversions, problems = normalise(fields)
+    profile = HealthProfile(**{k: v for k, v in clean.items()
+                               if k in HealthProfile.model_fields})
+
+    assessment = RiskScorer(get_backend()).score(profile)
+    result = estimate(assessment, profile)
+    if result is None:
+        return _privacy_footer(
+            {
+                "available": False,
+                "reason": "There is not enough here for an honest estimate. "
+                          "Age is required, and the data has to be thick "
+                          "enough to say something meaningful.",
+            }
+        )
+
+    payload = result.as_dict()
+    payload["available"] = True
+    payload["how_to_present"] = (
+        "Give the adjusted figure and the national baseline together, so it "
+        "reads as a comparison rather than a verdict. Then the recoverable "
+        "years and what is driving them. Say plainly that this is a national "
+        "average adjusted for lifestyle, not a prediction about them, and "
+        "that the point of it is the part they can change."
+    )
+    if conversions:
+        payload["units_interpreted"] = conversions
+    if problems:
+        payload["unit_problems"] = problems
+    return _privacy_footer(payload)
+
+
+@server.tool(
     name="start_health_sync",
     title="Connect Apple Health",
     description=(

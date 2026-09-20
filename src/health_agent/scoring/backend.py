@@ -92,9 +92,10 @@ class JevBackend:
 
     @property
     def noise_sigma(self) -> float:
-        # Placeholder. Measure it for real: score one profile 50 times and take
-        # the per-condition standard deviation, then set this from the worst.
-        return 0.01
+        # Measured, not guessed: scripts/measure_noise.py over three profiles
+        # spanning the risk range, worst per-condition sd. See
+        # evals/noise_profile.json. Re-measure when the model version moves.
+        return 0.013
 
     def classify(self, state: dict[str, Any]) -> RawResult:
         response = self._classifier.invoke(state)
@@ -187,8 +188,8 @@ class OpenRouterBackend:
 
     @property
     def noise_sigma(self) -> float:
-        # Same placeholder as JevBackend -- measure it before trusting pass^k.
-        return 0.01
+        # Same model as JevBackend, same measured figure.
+        return 0.013
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         import httpx
