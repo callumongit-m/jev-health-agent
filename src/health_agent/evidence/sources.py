@@ -25,12 +25,16 @@ from health_agent.evidence import corpus
 
 logger = logging.getLogger(__name__)
 
-NHS_BASE = "https://api.nhs.uk/conditions"
+#: NHS Website Content API v2. Two content areas matter here: `conditions`
+#: (the Health A-Z) for what each condition is, and `live-well` for the
+#: lifestyle factors. v1 is retired. Rate limit is 4,000 requests an hour by
+#: default, which caching keeps us nowhere near.
+NHS_BASE = os.getenv("NHS_API_BASE", "https://api.nhs.uk")
 #: NHS content changes slowly; a stale month is better than a failed request.
 CACHE_TTL = timedelta(days=30)
 
-#: registry key -> nhs.uk conditions slug
-NHS_SLUGS: dict[str, str] = {
+#: condition key -> Health A-Z slug
+NHS_CONDITION_SLUGS: dict[str, str] = {
     "t2d_10yr": "type-2-diabetes",
     "cvd_10yr": "cardiovascular-disease",
     "hypertension": "high-blood-pressure-hypertension",
@@ -39,6 +43,21 @@ NHS_SLUGS: dict[str, str] = {
     "nafld": "non-alcoholic-fatty-liver-disease",
     "ckd": "kidney-disease",
 }
+
+#: factor key -> Live Well path. These are the modifiable factors, and Live
+#: Well is where NHS puts the advice rather than the pathology.
+NHS_LIVE_WELL_SLUGS: dict[str, str] = {
+    "smoking_burden": "quit-smoking/nhs-stop-smoking-services-help-you-quit",
+    "adiposity": "healthy-weight/managing-your-weight/start-losing-weight",
+    "activity_deficit": "exercise/exercise-guidelines/physical-activity-guidelines-for-adults-aged-19-to-64",
+    "sleep_debt": "sleep-and-tiredness/how-to-get-to-sleep",
+    "alcohol_burden": "alcohol-advice/calculating-alcohol-units",
+    "diet_quality": "eat-well/how-to-eat-a-balanced-diet/eating-a-balanced-diet",
+    "stress_load": "mental-wellbeing/stress-anxiety-depression/how-to-deal-with-stress",
+}
+
+#: Backwards-compatible alias.
+NHS_SLUGS = NHS_CONDITION_SLUGS
 
 
 def _db() -> sqlite3.Connection:
@@ -75,10 +94,18 @@ def _store(key: str, payload: dict[str, Any]) -> None:
         )
 
 
-def _fetch_nhs(key: str) -> dict[str, Any] | None:
-    """Live NHS Content API. Returns None when unavailable for any reason --
-    an assessment must never fail because a content API is down."""
-    slug = NHS_SLUGS.get(key)
+def _fetch_nhs(key: str, *, kind: str) -> dict[str, Any] | None:
+    """Live NHS Website Content API v2.
+
+    Returns None for any failure -- a missing key, a bad response, a slug
+    that has moved. An assessment must never fail because a content API is
+    having a bad afternoon; the curated corpus covers it.
+    """
+    if kind == "condition":
+        slug, area = NHS_CONDITION_SLUGS.get(key), "conditions"
+    else:
+        slug, area = NHS_LIVE_WELL_SLUGS.get(key), "live-well"
+
     api_key = os.getenv("NHS_API_KEY")
     if not (slug and api_key):
         return None
@@ -87,7 +114,7 @@ def _fetch_nhs(key: str) -> dict[str, Any] | None:
         import httpx
 
         response = httpx.get(
-            f"{NHS_BASE}/{slug}/",
+            f"{NHS_BASE}/{area}/{slug}/",
             headers={"subscription-key": api_key, "Accept": "application/json"},
             timeout=8.0,
         )
@@ -110,25 +137,25 @@ def _fetch_nhs(key: str) -> dict[str, Any] | None:
         "title": body.get("name") or key.replace("_", " ").title(),
         "points": points[:3],
         "source": "NHS",
-        "url": body.get("url") or f"https://www.nhs.uk/conditions/{slug}/",
+        "url": body.get("url") or f"https://www.nhs.uk/{area}/{slug}/",
         "retrieved": datetime.now(timezone.utc).date().isoformat(),
+        "live": True,
     }
 
 
 def guidance_for(key: str, *, kind: str = "condition") -> dict[str, Any] | None:
-    """Live NHS if configured and cached, else the curated corpus."""
-    if kind == "condition":
-        cached = _cached(key)
-        if cached is not None:
-            return cached
-        fetched = _fetch_nhs(key)
-        if fetched is not None:
-            _store(key, fetched)
-            return fetched
-        entry = corpus.for_condition(key)
-    else:
-        entry = corpus.for_factor(key)
+    """Live NHS if configured and reachable, else the curated corpus."""
+    cache_key = f"{kind}:{key}"
+    cached = _cached(cache_key)
+    if cached is not None:
+        return cached
 
+    fetched = _fetch_nhs(key, kind=kind)
+    if fetched is not None:
+        _store(cache_key, fetched)
+        return fetched
+
+    entry = corpus.for_condition(key) if kind == "condition" else corpus.for_factor(key)
     return entry.as_dict() if entry else None
 
 

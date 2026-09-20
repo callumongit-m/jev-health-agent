@@ -286,3 +286,48 @@ def test_every_factor_declares_what_it_needs():
         assert spec.evidence_fields, f"{spec.key} declares no evidence_fields"
         for field in spec.evidence_fields:
             assert field in HealthProfile.model_fields, f"{spec.key}: {field}"
+
+
+# --- NHS guidance sources ----------------------------------------------
+
+def test_guidance_falls_back_to_the_corpus_without_a_key(monkeypatch):
+    """No key, no network, still cited advice. An assessment must not depend
+    on a content API being up."""
+    from health_agent.evidence.sources import guidance_for
+
+    monkeypatch.delenv("NHS_API_KEY", raising=False)
+    for key, kind in (("t2d_10yr", "condition"), ("smoking_burden", "factor")):
+        entry = guidance_for(key, kind=kind)
+        assert entry and entry["source"] == "NHS"
+        assert entry["url"].startswith("https://www.nhs.uk/")
+        assert entry["points"]
+        assert not entry.get("live")
+
+
+def test_a_failing_nhs_fetch_does_not_break_the_assessment(monkeypatch, tmp_path):
+    """The whole point of the fallback."""
+    import httpx
+
+    from health_agent.evidence import sources
+
+    monkeypatch.setenv("NHS_API_KEY", "fake-key")
+    monkeypatch.setattr(sources, "_cached", lambda key: None)
+    monkeypatch.setattr(sources, "_store", lambda key, payload: None)
+
+    def explode(*args, **kwargs):
+        raise httpx.ConnectError("NHS is down")
+
+    monkeypatch.setattr(httpx, "get", explode)
+    entry = sources.guidance_for("t2d_10yr", kind="condition")
+    assert entry and entry["source"] == "NHS", "should have fallen back"
+
+
+def test_every_registry_entry_has_an_nhs_slug():
+    """A condition or factor added without one silently loses live guidance."""
+    from health_agent.domain.conditions import CONDITIONS, FACTORS
+    from health_agent.evidence.sources import (
+        NHS_CONDITION_SLUGS, NHS_LIVE_WELL_SLUGS,
+    )
+
+    assert {c.key for c in CONDITIONS} == set(NHS_CONDITION_SLUGS)
+    assert {f.key for f in FACTORS} == set(NHS_LIVE_WELL_SLUGS)
