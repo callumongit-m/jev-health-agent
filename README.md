@@ -172,6 +172,7 @@ export PYTHONPATH=.
 
 cp .env.example .env          # add your keys
 uv run python scripts/check_setup.py --live   # prove they work
+uv run python scripts/check_nhs.py            # probe the NHS content API
 
 uv run python scripts/demo_cli.py --persona heavy_smoker_cvd --agent
 uv run python scripts/demo_cli.py --apple-health ~/Downloads/export.zip --age 34 --sex male --agent

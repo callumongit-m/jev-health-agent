@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,11 +26,39 @@ from health_agent.evidence import corpus
 
 logger = logging.getLogger(__name__)
 
-#: NHS Website Content API v2. Two content areas matter here: `conditions`
-#: (the Health A-Z) for what each condition is, and `live-well` for the
-#: lifestyle factors. v1 is retired. Rate limit is 4,000 requests an hour by
-#: default, which caching keeps us nowhere near.
-NHS_BASE = os.getenv("NHS_API_BASE", "https://api.nhs.uk")
+# NHS Website Content API v2. Two content areas matter here: `conditions`
+# (the Health A-Z) for what each condition is, and `live-well` for the
+# lifestyle factors. v1 is retired. Rate limit is 4,000 requests an hour,
+# which caching keeps us nowhere near.
+#
+# There are two NHS platforms and they differ in host *and* auth header,
+# which is easy to get wrong -- both return 401 with a key meant for the
+# other. Probed against the live endpoints:
+#
+#   api.service.nhs.uk/nhs-website-content   header `apikey`
+#       NHS England API platform (Apigee). This is what the v2 catalogue
+#       entry on digital.nhs.uk issues keys for.
+#           {"fault":{"faultstring":"Failed to resolve API Key variable
+#            request.header.apikey"}}
+#
+#   api.nhs.uk                                header `subscription-key`
+#       The older NHS website developer portal (Azure APIM).
+#           {"statusCode":401,"message":"Access denied due to missing
+#            subscription key..."}
+#
+# The sandbox (sandbox.api.service.nhs.uk) needs no key, which is what the
+# docs mean by testing without one -- though it was returning 503 when last
+# probed.
+NHS_PLATFORM_BASE = "https://api.service.nhs.uk/nhs-website-content"
+NHS_LEGACY_BASE = "https://api.nhs.uk"
+NHS_BASE = os.getenv("NHS_API_BASE", NHS_PLATFORM_BASE)
+
+
+def _auth_header(api_key: str, base: str) -> dict[str, str]:
+    """The two platforms disagree about what the header is called."""
+    if "api.service.nhs.uk" in base:
+        return {"apikey": api_key}
+    return {"subscription-key": api_key}
 #: NHS content changes slowly; a stale month is better than a failed request.
 CACHE_TTL = timedelta(days=30)
 
@@ -94,6 +123,38 @@ def _store(key: str, payload: dict[str, Any]) -> None:
         )
 
 
+def _extract_points(body: dict[str, Any]) -> list[str]:
+    """Pull readable prose out of an NHS content document.
+
+    NHS uses schema.org, so the body is usually a WebPage with `hasPart`
+    sections. The exact nesting varies by page type, so this walks a few
+    known shapes rather than assuming one.
+    """
+    points: list[str] = []
+
+    def add(text: Any) -> None:
+        cleaned = " ".join(str(text or "").split())
+        # strip any markup that slipped through
+        cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+        cleaned = " ".join(cleaned.split())
+        if 40 < len(cleaned) < 400 and cleaned not in points:
+            points.append(cleaned)
+
+    add(body.get("description"))
+    for section in (body.get("hasPart") or [])[:6]:
+        if not isinstance(section, dict):
+            continue
+        add(section.get("description"))
+        add(section.get("text"))
+        for nested in (section.get("hasPart") or [])[:3]:
+            if isinstance(nested, dict):
+                add(nested.get("text") or nested.get("description"))
+        if len(points) >= 3:
+            break
+
+    return points[:3]
+
+
 def _fetch_nhs(key: str, *, kind: str) -> dict[str, Any] | None:
     """Live NHS Website Content API v2.
 
@@ -114,30 +175,31 @@ def _fetch_nhs(key: str, *, kind: str) -> dict[str, Any] | None:
         import httpx
 
         response = httpx.get(
-            f"{NHS_BASE}/{area}/{slug}/",
-            headers={"subscription-key": api_key, "Accept": "application/json"},
+            f"{NHS_BASE.rstrip('/')}/{area}/{slug}",
+            headers={**_auth_header(api_key, NHS_BASE), "Accept": "application/json"},
             timeout=8.0,
         )
         response.raise_for_status()
         body = response.json()
     except Exception as exc:
-        logger.warning("NHS fetch failed for %s: %s", key, exc)
+        logger.warning("NHS fetch failed for %s/%s: %s", area, slug, exc)
         return None
 
-    points: list[str] = []
-    for section in (body.get("hasPart") or [])[:4]:
-        text = section.get("description") or section.get("text") or ""
-        text = " ".join(str(text).split())
-        if 40 < len(text) < 400:
-            points.append(text)
-
+    points = _extract_points(body)
     if not points:
+        # A shape we do not recognise. Log the keys, not the content, so the
+        # mapping can be fixed without guessing at the schema.
+        logger.warning(
+            "NHS returned %s/%s in an unrecognised shape; top-level keys: %s",
+            area, slug, sorted(body)[:12],
+        )
         return None
     return {
         "title": body.get("name") or key.replace("_", " ").title(),
         "points": points[:3],
         "source": "NHS",
         "url": body.get("url") or f"https://www.nhs.uk/{area}/{slug}/",
+        "api_base": NHS_BASE,
         "retrieved": datetime.now(timezone.utc).date().isoformat(),
         "live": True,
     }
