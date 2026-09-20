@@ -1,4 +1,5 @@
 from health_agent.domain.conditions import CONDITIONS, FACTORS
+import json
 import os
 import pytest
 from health_agent.domain.profile import HealthProfile, Sex, SmokingStatus
@@ -287,3 +288,36 @@ def test_every_factor_declares_what_it_needs():
         assert spec.evidence_fields, f"{spec.key} declares no evidence_fields"
         for field in spec.evidence_fields:
             assert field in HealthProfile.model_fields, f"{spec.key}: {field}"
+
+
+def test_no_per_condition_certainty_is_reported():
+    """It used to derive one from distance to 0.5, which measures
+    decisiveness rather than confidence -- a calibrated 46% is a confident
+    statement that something is near a coin flip, and it was displayed as
+    0.08. Jev gives no confidence signal for a Noul, so none is claimed."""
+    from health_agent.adapters.core import assess
+
+    out = assess(
+        {"age": 45, "sex": "male", "height_cm": 178, "weight_kg": 92,
+         "waist_cm": 98, "smoking_status": "never",
+         "alcohol_units_per_week": 8, "moderate_activity_minutes_per_week": 90,
+         "sleep_hours_avg": 7, "on_bp_medication": False,
+         "previously_high_glucose": False, "eats_vegetables_daily": True},
+        scorer=RiskScorer(FakeBackend(seed=2, noise=0.0)),
+    )
+    for entry in out["risk"].values():
+        assert "certainty" not in entry, entry
+        assert entry["means"], "every condition needs a plain explanation"
+
+    blob = json.dumps(out).lower()
+    assert "capped)" not in blob, "the capped-certainty label should be gone"
+
+
+def test_every_condition_is_explained_in_plain_english():
+    from health_agent.domain.conditions import CONDITIONS
+
+    for spec in CONDITIONS:
+        assert len(spec.plain) > 60, f"{spec.key} needs a real explanation"
+        assert spec.label.lower() not in spec.plain.lower(), (
+            f"{spec.key} just restates its own name"
+        )

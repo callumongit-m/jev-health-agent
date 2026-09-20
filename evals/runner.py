@@ -145,6 +145,14 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                  C.check_guidance_is_cited(persona))
             )
             built.append(
+                (f"no_invented_confidence[{persona.id}]", "graph",
+                 C.check_no_invented_confidence(persona))
+            )
+            built.append(
+                (f"conditions_explained[{persona.id}]", "graph",
+                 C.check_conditions_are_explained(persona))
+            )
+            built.append(
                 (f"table_and_chart[{persona.id}]", "graph",
                  C.check_table_and_projection_reach_the_host(persona))
             )
@@ -168,7 +176,7 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                  C.check_age_band_gating(age, extra, expected))
             )
         built.append(
-            ("evidence_caps_certainty", "graph", C.check_thin_evidence_caps_certainty())
+            ("thin_evidence_declared", "graph", C.check_thin_evidence_is_declared())
         )
         built.append(
             ("no_test_required", "graph", C.check_no_test_is_ever_required())
@@ -192,6 +200,10 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
         )
         built.append(
             ("one_sufficiency", "graph", C.check_one_notion_of_sufficiency())
+        )
+        built.append(
+            ("le_tool_agrees", "graph",
+             C.check_life_expectancy_tool_agrees_with_the_gate())
         )
         built.append(
             ("asks_age_appropriate", "graph", C.check_asks_only_for_what_the_age_needs())

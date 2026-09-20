@@ -39,12 +39,13 @@ class ConditionRisk(BaseModel):
     def band(self) -> RiskBand:
         return RiskBand.from_probability(self.probability)
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def certainty(self) -> float:
-        """Noul answers carry no confidence field of their own, so derive it:
-        a probability near 0.5 is the model declining to commit."""
-        return round(abs(self.probability - 0.5) * 2, 3)
+    # There was a `certainty` here, derived as distance from 0.5. It
+    # measured decisiveness, not confidence, and the two are not the same
+    # thing: a calibrated 46% is a confident statement that something is
+    # near a coin flip, and it was being displayed as 0.08 -- "we have
+    # almost no idea". Noul answers carry no confidence signal, so rather
+    # than invent one, the report states the evidence tier once and leaves
+    # the per-condition column out.
 
 
 #: Most a factor may claim when the profile carries nothing about it.

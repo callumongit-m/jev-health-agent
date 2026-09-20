@@ -67,6 +67,23 @@ def _privacy_footer(payload: dict[str, Any]) -> dict[str, Any]:
         "Estimate this person's probability of developing common chronic "
         "conditions and which areas of their life carry the most weight in "
         "that picture.\n\n"
+        "ASK FOR THESE, IN THIS ORDER. They are ordered by how much they "
+        "change the answer:\n"
+        "  1. Age and sex -- without age there is no estimate at all.\n"
+        "  2. Waist measurement, and height and weight. Ask for waist "
+        "explicitly; people do not volunteer it. It matters more than BMI "
+        "and, unlike BMI, it does not mistake muscle for fat -- without it "
+        "anyone who trains reads as overweight.\n"
+        "  3. The three recall questions: ever prescribed blood pressure "
+        "medication, ever told their blood sugar was high (including in "
+        "pregnancy), and whether they eat vegetables most days. No test "
+        "needed, and from 30 onwards an estimate is not given without them.\n"
+        "  4. Lifestyle: smoking, alcohol units a week, exercise minutes a "
+        "week, typical sleep, diet 1-5, stress 1-5.\n"
+        "  5. Anything measured they happen to know -- blood pressure, "
+        "HbA1c, cholesterol -- and any current symptoms.\n\n"
+        "Ask for the lot in one message rather than interrogating them one "
+        "field at a time, and tell them to skip whatever they do not know.\n\n"
         "Measurements accept any unit -- \"5'11\", 13 stone 4, 32in, 5.7%\" "
         "all work. Pass them as the person said them; do not convert, and do "
         "not ask them to.\n\n"
@@ -100,7 +117,7 @@ def assess_health(
     sex: Annotated[Literal["male", "female", "other"] | None, Field(None)] = None,
     height_cm: Annotated[str | float | None, Field(None, description="any unit: 180, 5'11\", 1.8m, 71in")] = None,
     weight_kg: Annotated[str | float | None, Field(None, description="any unit: 85kg, 187lb, 13 stone 4")] = None,
-    waist_cm: Annotated[str | float | None, Field(None, description="any unit: 82cm or 32in. Better than BMI, and unlike BMI it does not mistake muscle for fat")] = None,
+    waist_cm: Annotated[str | float | None, Field(None, description="ASK FOR THIS -- any unit, 82cm or 32in. It matters more than BMI and does not mistake muscle for fat, so without it anyone who trains reads as overweight")] = None,
     systolic_bp: Annotated[int | None, Field(None, ge=50, le=300, description="top number")] = None,
     diastolic_bp: Annotated[int | None, Field(None, ge=30, le=200)] = None,
     resting_hr: Annotated[int | None, Field(None, ge=25, le=220)] = None,
@@ -183,15 +200,25 @@ def life_expectancy(
     profile = HealthProfile(**{k: v for k, v in clean.items()
                                if k in HealthProfile.model_fields})
 
+    from health_agent.domain import evidence as evidence_rules
+
     assessment = RiskScorer(get_backend()).score(profile)
-    result = estimate(assessment, profile)
+    # Same age-aware check the assessment used. Without it this falls back
+    # to a raw classifier threshold and refuses people the assessment just
+    # accepted -- which is exactly what it did to a fit 23-year-old.
+    evidence = evidence_rules.assess(profile)
+    result = estimate(assessment, profile, evidence)
     if result is None:
+        missing = list(evidence.missing_required) or ["age"]
         return _privacy_footer(
             {
                 "available": False,
-                "reason": "There is not enough here for an honest estimate. "
-                          "Age is required, and the data has to be thick "
-                          "enough to say something meaningful.",
+                "reason": "Not enough to give an honest estimate yet.",
+                "need": missing,
+                "say_this": (
+                    "Ask for what is in `need` and try again. Do not guess "
+                    "at a figure, and do not imply one."
+                ),
             }
         )
 

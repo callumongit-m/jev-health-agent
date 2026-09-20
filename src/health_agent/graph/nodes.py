@@ -308,18 +308,9 @@ def _brief(state: AgentState) -> str:
                 + " would sharpen it -- suggest it once, concretely, without "
                 "making it a condition of acting on what is already clear."
             )
-    lines += [
-        "",
-        "Probabilities (with certainty -- low certainty means speak in ranges):",
-    ]
-    ceiling = evidence.confidence_ceiling if evidence is not None else 1.0
+    lines += ["", "Probabilities:"]
     for c in sorted(assessment.conditions, key=lambda x: -x.probability):
-        shown = min(c.certainty, ceiling)
-        capped = " [capped by evidence available]" if c.certainty > ceiling else ""
-        lines.append(
-            f"  {c.label}: {c.probability:.0%} ({c.band}, "
-            f"certainty {shown:.2f}){capped}"
-        )
+        lines.append(f"  {c.label}: {c.probability:.0%} ({c.band})")
 
     lines += [
         "",
@@ -389,21 +380,14 @@ def build_payload(state: AgentState) -> dict:
     # untrustworthy, and a calling agent given numbers will present them as
     # final regardless of the caveat attached.
     if assessment is not None and state.get("status") not in ("seek_care", "needs_input"):
-        # Thin evidence caps how certain the report may sound, however
-        # confident the classifier is. A lifestyle-only estimate and one
-        # backed by bloods should not read with the same authority.
-        ceiling = (
-            state["evidence"].confidence_ceiling
-            if state.get("evidence") is not None
-            else 1.0
-        )
+        from health_agent.domain.conditions import CONDITIONS_BY_KEY
+
         payload["risk"] = {
             c.key: {
                 "label": c.label,
                 "probability": round(c.probability, 4),
                 "band": c.band,
-                "certainty": round(min(c.certainty, ceiling), 3),
-                "certainty_capped_by_evidence": c.certainty > ceiling,
+                "means": CONDITIONS_BY_KEY[c.key].plain,
             }
             for c in assessment.conditions
         }

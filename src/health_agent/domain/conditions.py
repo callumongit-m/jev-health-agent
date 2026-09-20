@@ -21,6 +21,9 @@ class ConditionSpec:
     key: str
     label: str
     instructions: str
+    #: One sentence a person can read. Shown next to the number, because a
+    #: probability for something you cannot name is not information.
+    plain: str = ""
     #: profile field -> direction that should make this condition MORE likely
     worsens_with: dict[str, Direction] = field(default_factory=dict)
 
@@ -56,6 +59,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
             "Weigh HbA1c, fasting glucose, BMI, waist-related adiposity, physical "
             "activity, age and family history of diabetes."
         ),
+        plain=(
+            "Your body stops handling blood sugar properly. Common, largely preventable, and often silent for years before it is found."
+        ),
         worsens_with={
             "hba1c_mmol_mol": "increase",
             "weight_kg": "increase",
@@ -72,6 +78,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
             f"or stroke -- {_HORIZON}. Weigh age, sex, blood pressure, cholesterol "
             "ratio, smoking, diabetes markers and family history of heart disease."
         ),
+        plain=(
+            "Disease of the heart and blood vessels -- the umbrella that heart attacks and strokes sit under."
+        ),
         worsens_with={
             "systolic_bp": "increase",
             "ldl_mmol_l": "increase",
@@ -87,6 +96,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
             "already meets the threshold. Weigh measured blood pressure, BMI, "
             "alcohol intake, sodium-heavy diet signals, stress and age."
         ),
+        plain=(
+            "Blood pressure high enough to damage arteries over time. It has almost no symptoms, so it is usually found by measuring rather than by feeling unwell."
+        ),
         worsens_with={
             "systolic_bp": "increase",
             "alcohol_units_per_week": "increase",
@@ -100,6 +112,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
             "This person currently meets the criteria for metabolic syndrome: at "
             "least three of central adiposity, raised triglycerides, low HDL, "
             "raised blood pressure, raised fasting glucose."
+        ),
+        plain=(
+            "A cluster that travels together -- weight around the middle, blood pressure, blood sugar and blood fats all drifting the wrong way at once."
         ),
         worsens_with={
             "triglycerides_mmol_l": "increase",
@@ -115,6 +130,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
             "neck-related adiposity, sleep efficiency, reported snoring or "
             "daytime sleepiness, sex, age and resting heart rate."
         ),
+        plain=(
+            "Breathing repeatedly stops and restarts during sleep. It leaves people exhausted and raises blood pressure, and it treats well once found."
+        ),
         worsens_with={"weight_kg": "increase", "sleep_efficiency_pct": "decrease"},
     ),
     ConditionSpec(
@@ -123,6 +141,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
         instructions=(
             "This person has metabolic-dysfunction-associated fatty liver disease. "
             "Weigh BMI, ALT, triglycerides, alcohol intake and glucose markers."
+        ),
+        plain=(
+            "Fat building up in the liver, not caused by alcohol. Usually silent early on and often reversible."
         ),
         worsens_with={
             "alt_u_l": "increase",
@@ -136,6 +157,9 @@ CONDITIONS: tuple[ConditionSpec, ...] = (
         instructions=(
             f"This person will develop stage 3 or worse chronic kidney disease "
             f"{_HORIZON}. Weigh eGFR, blood pressure, diabetes markers and age."
+        ),
+        plain=(
+            "Kidneys filtering less well than they should. Usually has no symptoms until it is advanced, which is why it is picked up on tests."
         ),
         worsens_with={"egfr": "decrease", "systolic_bp": "increase"},
     ),

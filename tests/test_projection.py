@@ -97,13 +97,14 @@ def test_the_table_matches_the_risk_figures(scorer):
 
     out = assess({"age": 50, **PROFILE}, scorer=scorer)
     table = out["presentation"]["risk_table"]
-    assert table["columns"] == ["Condition", "Probability", "Band", "Certainty"]
+    assert table["columns"] == ["Condition", "Probability", "Band", "What it means"]
     assert len(table["rows"]) == len(out["risk"])
 
     by_label = {v["label"]: v for v in out["risk"].values()}
     for row in table["rows"]:
         expected = by_label[row["Condition"]]
         assert row["Probability"] == f"{expected['probability']:.0%}"
+        assert row["What it means"], f"{row['Condition']} has no explanation"
 
 
 def test_the_table_is_ordered_worst_first(scorer):

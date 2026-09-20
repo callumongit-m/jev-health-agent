@@ -815,8 +815,15 @@ def check_no_test_is_ever_required() -> CheckFn:
     return run
 
 
-def check_thin_evidence_caps_certainty() -> CheckFn:
-    """A lifestyle-only estimate must not read as confidently as one with bloods."""
+def check_thin_evidence_is_declared() -> CheckFn:
+    """A lifestyle-only estimate must not read as confidently as one backed
+    by bloods.
+
+    This used to check a per-condition certainty column against a ceiling.
+    That column is gone -- it derived confidence from distance to 0.5,
+    which measures decisiveness instead -- so the caveat now has to be
+    carried once, in words, for the whole picture.
+    """
 
     def run(scorer: RiskScorer) -> CheckResult:
         lean = _assess(scorer, HealthProfile(**(_EVIDENCE_BASE | {"age": 24})))
@@ -826,11 +833,17 @@ def check_thin_evidence_caps_certainty() -> CheckFn:
         ceiling = lean["evidence"]["confidence_ceiling"]
         if ceiling >= 1.0:
             return CheckResult(False, "lifestyle-only evidence claimed full confidence")
-        over = [
-            k for k, v in lean["risk"].items() if v["certainty"] > ceiling + 1e-6
-        ]
-        if over:
-            return CheckResult(False, f"{over} report certainty above the ceiling")
+
+        contract = lean.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+        verbatim = " ".join(contract.get("must_include_verbatim") or []).lower()
+        if "indicative rather than settled" not in verbatim:
+            return CheckResult(False, "thin evidence never declared to the reader")
+        if "no per-condition confidence" not in verbatim:
+            return CheckResult(
+                False, "does not say why there is no per-condition score"
+            )
         return CheckResult(True)
 
     return run
@@ -1260,6 +1273,87 @@ def check_projection_only_accumulates(persona: Persona) -> CheckFn:
                 return CheckResult(False, f"{key} falls over time: {values}")
             if values and values[-1] > 1.0:
                 return CheckResult(False, f"{key} exceeds certainty: {values[-1]}")
+        return CheckResult(True)
+
+    return run
+
+
+def check_no_invented_confidence(persona: Persona) -> CheckFn:
+    """No per-condition certainty is claimed.
+
+    One was derived from distance to 0.5, which measures decisiveness
+    rather than confidence -- a calibrated 46% is a confident statement
+    that something is near a coin flip, and it rendered as 0.08, reading
+    as "we have almost no idea". The classifier gives no confidence signal
+    for a yes/no question, so none is reported.
+    """
+
+    import json as _json
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        for key, entry in (out.get("risk") or {}).items():
+            if "certainty" in entry:
+                return CheckResult(False, f"{key} reports an invented certainty")
+        blob = _json.dumps(out).lower()
+        if "(capped)" in blob:
+            return CheckResult(False, "the capped-certainty label is still rendered")
+        return CheckResult(True)
+
+    return run
+
+
+def check_conditions_are_explained(persona: Persona) -> CheckFn:
+    """A probability attached to a name someone cannot interpret is not
+    information."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        for key, entry in (out.get("risk") or {}).items():
+            if not entry.get("means"):
+                return CheckResult(False, f"{key} has no plain explanation")
+
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+        table = contract.get("risk_table") or {}
+        if "What it means" not in (table.get("columns") or []):
+            return CheckResult(False, "table has no explanation column")
+        for row in table.get("rows") or []:
+            if not row.get("What it means"):
+                return CheckResult(False, f"{row['Condition']} row has no explanation")
+        return CheckResult(True)
+
+    return run
+
+
+def check_life_expectancy_tool_agrees_with_the_gate() -> CheckFn:
+    """The standalone tool must use the same age-aware check as the
+    assessment. It did not, and refused a fit 23-year-old the assessment
+    had just accepted."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        from health_agent.domain import evidence as evidence_rules
+        from health_agent.scoring.actuarial import estimate
+
+        profile = HealthProfile(
+            age=23, sex="male", height_cm=181.6, weight_kg=85.0, waist_cm=79.0,
+            smoking_status="never", alcohol_units_per_week=0.7,
+            moderate_activity_minutes_per_week=425, sleep_hours_avg=7.5,
+            diet_quality_self_rating=3, perceived_stress_rating=4,
+        )
+        out = _assess(scorer, profile)
+        if out["status"] != "complete":
+            return CheckResult(True, "gate refused, so the tool should too")
+
+        evidence = evidence_rules.assess(profile)
+        result = estimate(scorer.score(profile), profile, evidence)
+        if result is None:
+            return CheckResult(
+                False,
+                "the assessment produced a report but the calculator refused "
+                "the same person",
+            )
         return CheckResult(True)
 
     return run

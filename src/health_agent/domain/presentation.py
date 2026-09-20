@@ -54,7 +54,7 @@ class Presentation:
         if self.risk_table:
             payload["risk_table"] = {
                 "render_as": "markdown table, exactly these rows and columns",
-                "columns": ["Condition", "Probability", "Band", "Certainty"],
+                "columns": ["Condition", "Probability", "Band", "What it means"],
                 "rows": list(self.risk_table),
             }
         if self.projection:
@@ -157,8 +157,10 @@ def build(
 
     if evidence.confidence_ceiling < 1.0:
         must.append(
-            f"This estimate is based on {evidence.tier.label}, so treat the "
-            f"numbers as indicative rather than settled."
+            f"These numbers rest on {evidence.tier.label}, so treat them as "
+            f"indicative rather than settled. That caveat applies to the "
+            f"whole picture -- there is no per-condition confidence score, "
+            f"because the classifier does not produce one."
         )
     if evidence.missing_recommended:
         readable = {
@@ -224,6 +226,8 @@ def build(
     # A table beats prose for seven numbers, and the host can render one.
     # Supplying the rows rather than the instruction means the figures
     # cannot drift in the retelling.
+    from health_agent.domain.conditions import CONDITIONS_BY_KEY
+
     table = tuple(
         {
             "Condition": c.label,
@@ -232,10 +236,11 @@ def build(
             # there
             "Probability": f"{round(c.probability, 4):.0%}",
             "Band": str(c.band).replace("_", " "),
-            "Certainty": (
-                f"{min(c.certainty, evidence.confidence_ceiling):.2f}"
-                + (" (capped)" if c.certainty > evidence.confidence_ceiling else "")
-            ),
+            # A probability for something someone cannot name is not
+            # information. There is no per-condition confidence column,
+            # because the classifier does not give one and the last attempt
+            # to derive it measured decisiveness instead.
+            "What it means": CONDITIONS_BY_KEY[c.key].plain,
         }
         for c in sorted(assessment.conditions, key=lambda x: -x.probability)
     )
@@ -293,7 +298,11 @@ def build(
                      "`ask_then_stop` question.",
             "risk_table": "Render `risk_table.rows` as a markdown table with "
                           "exactly the given columns. Do not recalculate, "
-                          "reorder or round the figures.",
+                          "reorder or round the figures. Keep the 'What it "
+                          "means' text -- a probability attached to a name "
+                          "someone cannot interpret is not information. If "
+                          "the column makes the table too wide, put the "
+                          "explanation under each row instead, but keep it.",
             "projection": "Render `projection.series` as a line chart -- age "
                           "on the x axis, cumulative probability on the y, "
                           "one line per condition using `projection.labels`. "
