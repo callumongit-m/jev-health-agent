@@ -149,6 +149,10 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
                  C.check_no_invented_confidence(persona))
             )
             built.append(
+                (f"worth_measuring[{persona.id}]", "graph",
+                 C.check_worth_measuring_is_computed_not_recited(persona))
+            )
+            built.append(
                 (f"conditions_explained[{persona.id}]", "graph",
                  C.check_conditions_are_explained(persona))
             )

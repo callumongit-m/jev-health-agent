@@ -16,7 +16,13 @@ Three things it assumes, all stated in the output because each one is a
 reason the curve overstates:
 
 * Lifestyle stays exactly as it is now. Nobody's does.
-* Each decade is conditionally independent of the last. Not strictly true.
+* Each decade is conditionally independent of the last. This is the weak
+  assumption, and it is why the far end of the curve runs high: composing
+  four decades of a 40 percent risk gets to 87 percent, which is above what
+  cohort studies show for almost any of these conditions. The shape and the
+  ordering between conditions survive that; the absolute number at the far
+  end should not be quoted as a lifetime risk. Said in the output, not just
+  here.
 * Nothing else happens first. There is no competing mortality in this model,
   so a lifetime figure is "if you live that long".
 """
@@ -32,7 +38,14 @@ from health_agent.domain.profile import COMPUTED_FIELDS, HealthProfile
 #: A decade at a time: the classifier's question is a ten-year one, so this
 #: is the natural step and anything finer is interpolation dressed as data.
 STEP_YEARS = 10
-#: Past the upper end of the life tables the composition stops meaning much.
+# Three decades, not a whole lifetime. Composing ten-year risks indefinitely
+# drives anything non-trivial to near-certainty -- a 45-year-old smoker came
+# out at 97% for diabetes and 100% for hypertension by 85, which is both
+# uninformative and wrong, and it made every counterfactual look identical
+# because they all saturate. Over thirty years the curve still shows the
+# shape and the differences between paths remain visible.
+HORIZON_YEARS = 30
+#: Never project past the top of the life tables regardless.
 MAX_AGE = 85
 #: Conditions worth charting. The rest add lines without adding information.
 CHARTED = ("t2d_10yr", "cvd_10yr", "hypertension", "ckd")
@@ -82,7 +95,8 @@ def build(
     if profile.age is None:
         return None
 
-    ages = list(range(profile.age, max_age + 1, STEP_YEARS))
+    ceiling = min(max_age, profile.age + HORIZON_YEARS)
+    ages = list(range(profile.age, ceiling + 1, STEP_YEARS))
     if len(ages) < 2:
         return None
 
@@ -122,9 +136,14 @@ def build(
             "Assumes nothing changes -- same weight, same habits, same "
             "everything -- which is the point of the chart rather than a "
             "prediction.",
-            "Each decade is treated as independent of the last, which "
-            "overstates the total somewhat.",
+            "Each decade is treated as independent of the last. That is the "
+            "biggest weakness here and it overstates -- read the shape and "
+            "the ordering between conditions, not the absolute figure at "
+            "the far end.",
             "It does not account for anything else happening first, so read "
             "a late figure as 'if you get there'.",
+            "It stops at thirty years. Compounding decade risks further than "
+            "that drives almost any starting point to near-certainty, which "
+            "stops being informative.",
         ),
     )

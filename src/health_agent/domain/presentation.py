@@ -38,6 +38,7 @@ class Presentation:
     evidence: tuple[dict[str, Any], ...] = ()
     risk_table: tuple[dict[str, Any], ...] = ()
     projection: dict[str, Any] | None = None
+    worth_measuring: tuple[dict[str, Any], ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         payload = {
@@ -59,6 +60,16 @@ class Presentation:
             }
         if self.projection:
             payload["projection"] = self.projection
+        if self.worth_measuring:
+            payload["worth_measuring"] = {
+                "why": (
+                    "Computed for this person, not general advice: each was "
+                    "scored across its plausible range to see how far the "
+                    "answer actually moves, then weighted by how easy it is "
+                    "to get. Present it as the single most useful next step."
+                ),
+                "items": list(self.worth_measuring),
+            }
         return payload
 
 
@@ -138,6 +149,7 @@ def build(
     urgent_guidance: str | None = None,
     guidance: list[dict[str, Any]] | None = None,
     projection: dict[str, Any] | None = None,
+    worth_measuring: list[dict[str, Any]] | None = None,
 ) -> Presentation:
     top = assessment.top_conditions(3)
     must: list[str] = []
@@ -249,6 +261,7 @@ def build(
         headline=headline,
         risk_table=table,
         projection=projection,
+        worth_measuring=tuple(worth_measuring or ()),
         must_include=tuple(must),
         must_not=(
             "Do not state a life expectancy, an age at death, or years "
@@ -291,11 +304,16 @@ def build(
         framing={
             "tone": "Direct and specific. This is someone's health, not a "
                     "sales page -- no false reassurance, no alarmism.",
+            "worth_measuring": "End with this. It answers 'what should I "
+                               "actually do next', it is computed for this "
+                               "person rather than recited, and it is the "
+                               "most concretely useful thing in the "
+                               "response. Lead with the top item.",
             "order": "Urgent triage first if present, then the `risk_table` "
                      "as a markdown table, then the `projection` as a line "
                      "chart, then what stands out and why, then the areas by "
-                     "weight, then the caveats, and end by asking the "
-                     "`ask_then_stop` question.",
+                     "weight, then `worth_measuring`, then the caveats, and "
+                     "end by asking the `ask_then_stop` question.",
             "risk_table": "Render `risk_table.rows` as a markdown table with "
                           "exactly the given columns. Do not recalculate, "
                           "reorder or round the figures. Keep the 'What it "

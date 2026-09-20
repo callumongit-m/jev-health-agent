@@ -1357,3 +1357,37 @@ def check_life_expectancy_tool_agrees_with_the_gate() -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_worth_measuring_is_computed_not_recited(persona: Persona) -> CheckFn:
+    """The suggestion has to depend on the person.
+
+    A fixed list of sensible tests is something a language model produces
+    for free. The value here is that it is scored for *this* profile, so
+    two different people must be able to get different answers, and
+    anything already known must never be suggested.
+    """
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, persona.profile)
+        contract = out.get("presentation")
+        if contract is None:
+            return CheckResult(True, "narrated mode")
+
+        block = contract.get("worth_measuring")
+        known = persona.profile.known_fields()
+        if block:
+            from health_agent.domain.worth_measuring import CANDIDATES
+
+            by_label = {c.label: c.field for c in CANDIDATES}
+            for item in block["items"]:
+                field = by_label.get(item["what"])
+                if field and field in known:
+                    return CheckResult(
+                        False, f"suggested measuring {field}, which they gave"
+                    )
+                if not item.get("how_to_get_it"):
+                    return CheckResult(False, f"{item['what']} without how to get it")
+        return CheckResult(True)
+
+    return run

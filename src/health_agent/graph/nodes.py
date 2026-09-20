@@ -213,6 +213,7 @@ def make_nodes(scorer: RiskScorer):
         """
         from health_agent.domain import presentation as presentation_rules
         from health_agent.domain import projection as projection_rules
+        from health_agent.domain import worth_measuring as measuring_rules
         from health_agent.scoring.actuarial import estimate
 
         assessment = state["assessment"]
@@ -238,6 +239,11 @@ def make_nodes(scorer: RiskScorer):
         # the classifier is cheap.
         projection = projection_rules.build(profile, scorer)
 
+        # The one thing a language model cannot work out by reasoning:
+        # which of the things they have not told us would actually change
+        # the answer, for them.
+        suggestions = measuring_rules.rank(profile, scorer)
+
         contract = presentation_rules.build(
             assessment,
             state["evidence"],
@@ -245,6 +251,7 @@ def make_nodes(scorer: RiskScorer):
             state.get("urgent_guidance"),
             guidance=guidance,
             projection=projection.as_dict() if projection else None,
+            worth_measuring=[s.as_dict() for s in suggestions],
         )
 
         return {
