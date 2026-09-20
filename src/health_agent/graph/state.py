@@ -28,6 +28,7 @@ class AgentState(TypedDict, total=False):
     red_flags: list[str]
     symptom_patterns: list[str]
     urgent_guidance: str | None
+    threshold_findings: list[dict[str, Any]]
     clarifying_questions: list[str]
     status: Status
     answer: str | None

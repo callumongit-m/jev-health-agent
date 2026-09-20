@@ -965,3 +965,65 @@ def check_guidance_is_cited(persona: Persona) -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_diagnostic_values_are_stated_not_estimated() -> CheckFn:
+    """A value that already meets a diagnostic threshold must be reported as
+    the fact it is, not converted into a probability of developing it.
+
+    Found against the real model: a 27-year-old with an HbA1c of 60 was told
+    they had a 12 percent chance of developing type 2 diabetes. Defensible
+    as an answer to "will they develop it" -- they already have it -- and
+    dangerously reassuring to read.
+    """
+
+    BASE = {
+        "sex": "female", "height_cm": 168.0, "weight_kg": 60.0,
+        "smoking_status": "never", "alcohol_units_per_week": 4.0,
+        "moderate_activity_minutes_per_week": 280, "sleep_hours_avg": 8.0,
+        "on_bp_medication": False, "previously_high_glucose": False,
+        "eats_vegetables_daily": True,
+    }
+
+    CASES = (
+        ({"age": 27, "hba1c_mmol_mol": 60}, "hba1c_mmol_mol", "diabetes"),
+        ({"age": 45, "fasting_glucose_mmol_l": 7.4}, "fasting_glucose_mmol_l", "diabetes"),
+        ({"age": 60, "egfr": 26}, "egfr", "kidney"),
+    )
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        for extra, field, word in CASES:
+            out = _assess(scorer, HealthProfile(**(BASE | extra)))
+            met = out.get("clinical_thresholds_met") or []
+            if not any(f["field"] == field for f in met):
+                return CheckResult(
+                    False, f"{field}={extra[field]} did not register as diagnostic"
+                )
+            guidance = (out.get("act_on_this_first") or "").lower()
+            if word not in guidance:
+                return CheckResult(
+                    False, f"{field} finding never reached the report: {guidance[:90]}"
+                )
+        return CheckResult(True)
+
+    return run
+
+
+def check_a_crisis_reading_stops_the_assessment() -> CheckFn:
+    """A hypertensive crisis is not something to hand someone a ten-year
+    risk percentage about."""
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        out = _assess(scorer, HealthProfile(
+            age=50, sex="male", height_cm=178.0, weight_kg=90.0,
+            systolic_bp=188, diastolic_bp=126, smoking_status="never",
+            alcohol_units_per_week=6.0, sleep_hours_avg=7.0,
+            moderate_activity_minutes_per_week=120,
+        ))
+        if out["status"] != "seek_care":
+            return CheckResult(False, f"status {out['status']!r} on a crisis reading")
+        if "risk" in out:
+            return CheckResult(False, "scored someone in a hypertensive crisis")
+        return CheckResult(True)
+
+    return run

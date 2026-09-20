@@ -166,6 +166,14 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
             ("no_test_required", "graph", C.check_no_test_is_ever_required())
         )
         built.append(
+            ("diagnostic_values_stated", "graph",
+             C.check_diagnostic_values_are_stated_not_estimated())
+        )
+        built.append(
+            ("crisis_stops_assessment", "graph",
+             C.check_a_crisis_reading_stops_the_assessment())
+        )
+        built.append(
             ("asks_age_appropriate", "graph", C.check_asks_only_for_what_the_age_needs())
         )
 

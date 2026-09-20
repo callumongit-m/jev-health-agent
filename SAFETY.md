@@ -68,6 +68,23 @@ It is tuned against both directions — "I do not want to live" and exertional
 chest tightness must trigger; "I do not want to die young, how do I improve?"
 must not — and those cases are locked into the test suite.
 
+## Some numbers are facts, not estimates
+
+An HbA1c of 48 mmol/mol meets the diagnostic criterion for diabetes. A blood
+pressure of 185/120 is a hypertensive crisis. Those are definitions, and
+putting them through a risk model can only lose information.
+
+This was found by an eval rather than anticipated. Asked how likely a
+27-year-old with an HbA1c of 60 was to *develop* type 2 diabetes, the
+classifier answered 12 percent. That is defensible as an answer to the
+question asked — someone at 60 already has diabetes, so "develop" is the
+wrong verb — and a dangerously reassuring thing for that person to read.
+
+So diagnostic thresholds are now checked in code, before and alongside the
+estimate, and they report what a value *means* rather than how likely
+something is. Each one cites its guideline (NICE, WHO). A crisis reading
+stops the assessment entirely, the way acute symptoms do.
+
 ## How uncertainty is handled
 
 Three rules, enforced in code rather than left to good intentions:

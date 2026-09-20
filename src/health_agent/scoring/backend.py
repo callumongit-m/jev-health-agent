@@ -13,6 +13,7 @@ The whole Jev question set goes out in ONE call. Two implementations:
 
 from __future__ import annotations
 
+import logging
 import os
 import random
 from dataclasses import dataclass
@@ -23,6 +24,8 @@ from health_agent.domain.conditions import (
     DATA_SUFFICIENCY,
     FACTORS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +138,12 @@ _OPENROUTER_URLS = (
     "https://openrouter.ai/api/v1/api/alpha/decisions",
 )
 
+#: Transient failures on a long run are normal; losing an assessment to one
+#: is not.
+MAX_ATTEMPTS = 3
+BACKOFF_SECONDS = 0.5
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 #: OpenRouter prefixes floating "latest" aliases with a tilde. Without it the
 #: API returns 400 "Model typesafe/jev-latest does not exist". Pin to
 #: "typesafe/jev-1.13" instead if you want a fixed version.
@@ -192,6 +201,15 @@ class OpenRouterBackend:
         return 0.013
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Post with retries.
+
+        Long runs see occasional dropped connections -- two checks in a
+        real-model eval failed on "server disconnected" rather than on
+        anything the model did. A transient drop should not lose someone's
+        assessment either, so it is retried with backoff.
+        """
+        import time
+
         import httpx
 
         headers = {
@@ -201,24 +219,35 @@ class OpenRouterBackend:
         candidates = (self._url,) if self._url else self._urls
         last_error: Exception | None = None
 
-        for url in candidates:
-            try:
-                response = httpx.post(
-                    url, headers=headers, json=payload, timeout=self._timeout
+        for attempt in range(MAX_ATTEMPTS):
+            for url in candidates:
+                try:
+                    response = httpx.post(
+                        url, headers=headers, json=payload, timeout=self._timeout
+                    )
+                except Exception as exc:  # connection dropped, DNS, timeout
+                    last_error = exc
+                    continue
+                if response.status_code == 404 and len(candidates) > 1:
+                    continue  # wrong path variant; try the other
+                if response.status_code in RETRYABLE_STATUS:
+                    last_error = RuntimeError(f"HTTP {response.status_code}")
+                    break  # the path is right, the service is struggling
+                response.raise_for_status()
+                self._url = url
+                return response.json()
+
+            if attempt < MAX_ATTEMPTS - 1:
+                time.sleep(BACKOFF_SECONDS * (2**attempt))
+                logger.warning(
+                    "Jev call failed (%s), retry %d/%d",
+                    last_error, attempt + 1, MAX_ATTEMPTS - 1,
                 )
-            except Exception as exc:  # network failure -- try the next path
-                last_error = exc
-                continue
-            if response.status_code == 404 and len(candidates) > 1:
-                continue  # wrong path variant; try the other
-            response.raise_for_status()
-            self._url = url
-            return response.json()
 
         raise RuntimeError(
-            f"OpenRouter Decisions API unreachable at {candidates}. "
-            f"Set OPENROUTER_DECISIONS_URL if the path has moved. "
-            f"Last error: {last_error}"
+            f"OpenRouter Decisions API unreachable after {MAX_ATTEMPTS} "
+            f"attempts at {candidates}. Set OPENROUTER_DECISIONS_URL if the "
+            f"path has moved. Last error: {last_error}"
         )
 
     def classify(self, state: dict[str, Any]) -> RawResult:

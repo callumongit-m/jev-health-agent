@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from health_agent import safety
 from health_agent.config import SETTINGS
 from health_agent.domain import evidence as evidence_rules
+from health_agent.domain import thresholds as threshold_rules
 from health_agent.domain.profile import HealthProfile
 from health_agent.graph import tools as agent_tools
 from health_agent.graph.reasoner import SYSTEM_PROMPT, get_reasoner
@@ -70,14 +71,46 @@ def make_nodes(scorer: RiskScorer):
                 "answer": safety.advice_for(flags),
             }
 
+        # Values that already meet a diagnostic threshold are a matter of
+        # definition, not probability, so they are checked in code. An
+        # HbA1c of 60 is diabetes; asking a model how likely someone is to
+        # "develop" it returns a reassuring number to someone who has it.
+        findings = threshold_rules.check(profile)
+        emergency = [
+            f for f in findings
+            if f.urgency is threshold_rules.Urgency.EMERGENCY
+        ]
+        if emergency:
+            return {
+                "red_flags": [f"{f.field}_critical" for f in emergency],
+                "symptom_patterns": [],
+                "threshold_findings": [f.as_dict() for f in findings],
+                "status": "seek_care",
+                "answer": "\n\n".join(
+                    f"{f.meaning} {f.action}" for f in emergency
+                ),
+            }
+
         # Patterns are not emergencies, so they do not stop the assessment.
         # They ride alongside it: the person still gets their risk picture,
         # and is told which of what they described is worth acting on now.
         patterns = safety.detect_patterns(*texts)
+        guidance = safety.pattern_guidance(patterns) or ""
+        if findings:
+            lines = [
+                "Some of your readings already mean something definite, "
+                "separately from any risk estimate:",
+                "",
+            ]
+            for f in findings:
+                lines.append(f"  {f.meaning} {f.action} ({f.source})")
+            guidance = (guidance + "\n\n" + "\n".join(lines)).strip()
+
         return {
             "red_flags": [],
             "symptom_patterns": [p.key for p in patterns],
-            "urgent_guidance": safety.pattern_guidance(patterns) or None,
+            "threshold_findings": [f.as_dict() for f in findings],
+            "urgent_guidance": guidance or None,
         }
 
     def classify(state: AgentState) -> dict:
@@ -305,6 +338,8 @@ def build_payload(state: AgentState) -> dict:
     if state.get("urgent_guidance"):
         payload["act_on_this_first"] = state["urgent_guidance"]
         payload["symptom_patterns"] = state.get("symptom_patterns") or []
+    if state.get("threshold_findings"):
+        payload["clinical_thresholds_met"] = state["threshold_findings"]
     if state.get("clarifying_questions"):
         payload["questions"] = state["clarifying_questions"]
         payload["data_sufficiency"] = (

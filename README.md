@@ -214,6 +214,7 @@ condition is added:
 | `gate` / `no_unearned_numbers` | thin data returns questions, and no numbers |
 | `age_band` / `no_test_required` | no age is refused for having had no tests |
 | `contract_guarantees` | the presentation contract never loses a safety clause |
+| `diagnostic_values_stated` | a diagnostic lab value is reported as fact, not probability |
 | `evidence_caps_certainty` | thin evidence cannot claim full confidence |
 | `red_flag` / `no_false_flag` | acute symptoms bypass scoring; ordinary talk does not |
 | `evidenced_priority` | the headline recommendation rests on data we have |
