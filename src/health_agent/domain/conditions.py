@@ -246,6 +246,45 @@ FACTORS: tuple[FactorSpec, ...] = (
 )
 
 
+# Safety screening, asked in the same batched call as everything else, so it
+# costs no extra latency and no extra money.
+#
+# The keyword screen in safety.py is deterministic, free and instant, and it
+# is also brittle: tested against paraphrases, it missed six real
+# emergencies out of six, including "elephant sitting on my chest, left arm
+# numb" -- the most recognisable description of a heart attack there is. The
+# classifier got all ten cases right. Keyword matching stays as the floor
+# because it works offline and cannot drift; this is the net above it.
+ACUTE_SCREEN = ConditionSpec(
+    key="acute_emergency",
+    label="Acute emergency",
+    instructions=(
+        "This person is describing something that needs emergency medical "
+        "care right now -- a heart attack, stroke, anaphylaxis, severe "
+        "breathing difficulty, major bleeding, or a mental health crisis "
+        "with risk to life. Judge what they are describing, not how calmly "
+        "they describe it."
+    ),
+)
+
+URGENT_SCREEN = ConditionSpec(
+    key="needs_urgent_review",
+    label="Needs urgent review",
+    instructions=(
+        "This person is describing symptoms that should be assessed by a "
+        "clinician within days rather than left to see whether they pass. "
+        "Answer false for ordinary aches, tiredness and everyday complaints."
+    ),
+)
+
+#: Above this the assessment stops and routes to emergency care.
+ACUTE_THRESHOLD = 0.5
+#: Above this the report leads with getting seen, but still runs.
+URGENT_THRESHOLD = 0.6
+
+SCREENS: tuple[ConditionSpec, ...] = (ACUTE_SCREEN, URGENT_SCREEN)
+
+
 #: Meta question -- gates whether there is enough data to score at all.
 DATA_SUFFICIENCY = ConditionSpec(
     key="data_sufficient",

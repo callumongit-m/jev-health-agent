@@ -127,3 +127,114 @@ def test_an_emergency_still_outranks_a_pattern():
     text = "crushing chest pain, and I'm breathless with swollen ankles"
     assert detect(text), "the emergency must still fire"
     assert detect_patterns(text), "and the pattern is still recognised"
+
+
+# --- the classifier as a second net ------------------------------------
+
+PARAPHRASED_EMERGENCIES = [
+    "elephant sitting on my chest, left arm numb",
+    "my speech went funny for ten minutes then came back",
+    "worst pain I've ever had in my head, came on in seconds",
+    "my vision went grey in one eye like a curtain coming down",
+    "I keep thinking everyone would be fine if I wasn't around",
+]
+
+
+@pytest.mark.parametrize("text", PARAPHRASED_EMERGENCIES)
+def test_the_keyword_screen_is_known_to_miss_these(text):
+    """Documenting the gap, not accepting it.
+
+    Keyword matching is deterministic, free and works offline, so it stays
+    as the floor. It is also brittle: every one of these is a real
+    emergency described the way someone actually would, and none of them
+    match. That is what the classifier screen is for.
+    """
+    from health_agent.safety import detect, detect_patterns
+
+    assert not detect(text) and not detect_patterns(text), (
+        f"{text!r} now matches a keyword -- move it out of this list"
+    )
+
+
+def test_the_classifier_screen_catches_them(monkeypatch):
+    """With the screen firing, an emergency stops the assessment even when
+    no keyword matched."""
+    from health_agent.adapters.core import assess
+    from health_agent.domain.conditions import ACUTE_SCREEN
+    from health_agent.scoring import FakeBackend, RiskScorer
+    from health_agent.scoring.backend import RawAnswer
+
+    original = FakeBackend.classify
+
+    def flags_acute(self, state):
+        result = original(self, state)
+        answers = dict(result.answers)
+        answers[ACUTE_SCREEN.key] = RawAnswer(kind="noul", value=0.92)
+        return type(result)(answers=answers, model=result.model,
+                            request_id=result.request_id)
+
+    monkeypatch.setattr(FakeBackend, "classify", flags_acute)
+    out = assess(
+        {"age": 54, "sex": "male", "height_cm": 178, "weight_kg": 92,
+         "smoking_status": "former", "alcohol_units_per_week": 10,
+         "moderate_activity_minutes_per_week": 90, "sleep_hours_avg": 7,
+         "on_bp_medication": False, "previously_high_glucose": False,
+         "eats_vegetables_daily": True},
+        raw_text="elephant sitting on my chest",
+        scorer=RiskScorer(FakeBackend(seed=1, noise=0.0)),
+    )
+    assert out["status"] == "seek_care"
+    assert "risk" not in out, "must not show numbers to someone mid-emergency"
+    assert "emergency services" in out["answer"]
+
+
+def test_the_persons_own_words_reach_the_classifier():
+    """The screen is worthless if the free text never gets there."""
+    from health_agent.domain.profile import HealthProfile
+    from health_agent.scoring import FakeBackend, RiskScorer
+
+    seen = {}
+
+    class Recording(FakeBackend):
+        def classify(self, state):
+            seen.update(state)
+            return super().classify(state)
+
+    RiskScorer(Recording(seed=1)).score(
+        HealthProfile(age=40, sex="male"), free_text="chest feels tight"
+    )
+    assert seen.get("_in_their_own_words") == "chest feels tight"
+
+
+def test_an_urgent_screen_leads_the_report_without_suppressing_it():
+    from health_agent.adapters.core import assess
+    from health_agent.domain.conditions import URGENT_SCREEN
+    from health_agent.scoring import FakeBackend, RiskScorer
+    from health_agent.scoring.backend import RawAnswer
+
+    original = FakeBackend.classify
+
+    def flags_urgent(self, state):
+        result = original(self, state)
+        answers = dict(result.answers)
+        answers[URGENT_SCREEN.key] = RawAnswer(kind="noul", value=0.85)
+        return type(result)(answers=answers, model=result.model,
+                            request_id=result.request_id)
+
+    FakeBackend.classify = flags_urgent
+    try:
+        out = assess(
+            {"age": 54, "sex": "male", "height_cm": 178, "weight_kg": 92,
+             "smoking_status": "former", "alcohol_units_per_week": 10,
+             "moderate_activity_minutes_per_week": 90, "sleep_hours_avg": 7,
+             "on_bp_medication": False, "previously_high_glucose": False,
+             "eats_vegetables_daily": True},
+            raw_text="been coughing up rusty stuff for a week",
+            scorer=RiskScorer(FakeBackend(seed=1, noise=0.0)),
+        )
+    finally:
+        FakeBackend.classify = original
+
+    assert out["status"] == "complete", "urgent is not an emergency"
+    assert "within the next few days" in out["act_on_this_first"]
+    assert out["risk"], "they should still get their picture"

@@ -43,8 +43,8 @@ diagnosis.
 [Jev](https://docs.typesafe.ai/), a decision model that returns a calibrated
 probability directly rather than writing a number into a sentence. All fifteen
 questions — seven conditions, seven modifiable factors, one data-sufficiency
-check — go out in a single call that costs a fraction of a penny and returns
-in under a second. No language model is involved in producing a probability.
+check, and two acute safety screens — go out in a single call that costs a
+fraction of a penny and returns in under a second. No language model is involved in producing a probability.
 
 **Recommendations cite their evidence.** Every factor carries NHS guidance
 for *what* to do, and the systematic reviews behind it for *how much it

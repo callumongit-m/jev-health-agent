@@ -5,11 +5,14 @@ from __future__ import annotations
 import time
 
 from health_agent.domain.conditions import (
+    ACUTE_SCREEN,
     CONDITIONS,
     CONDITIONS_BY_KEY,
     DATA_SUFFICIENCY,
     FACTORS,
     FACTORS_BY_KEY,
+    SCREENS,
+    URGENT_SCREEN,
 )
 from health_agent.domain.profile import HealthProfile
 from health_agent.domain.results import ConditionRisk, FactorScore, RiskAssessment
@@ -20,14 +23,24 @@ class RiskScorer:
     def __init__(self, backend: ScoringBackend | None = None) -> None:
         self.backend = backend or get_backend()
 
-    def score(self, profile: HealthProfile) -> RiskAssessment:
+    def score(
+        self, profile: HealthProfile, *, free_text: str | None = None
+    ) -> RiskAssessment:
         state = profile.to_state()
+        if free_text:
+            # The acute screens read this. A keyword screen cannot tell that
+            # "elephant sitting on my chest" is a heart attack; the
+            # classifier can, and it rides in the same call.
+            state["_in_their_own_words"] = free_text
         started = time.perf_counter()
         result = self.backend.classify(state)
         latency_ms = round((time.perf_counter() - started) * 1000, 1)
 
         missing = (
-            {c.key for c in CONDITIONS} | {f.key for f in FACTORS} | {DATA_SUFFICIENCY.key}
+            {c.key for c in CONDITIONS}
+            | {f.key for f in FACTORS}
+            | {DATA_SUFFICIENCY.key}
+            | {s.key for s in SCREENS}
         ) - result.answers.keys()
         if missing:
             raise ValueError(f"backend omitted answers: {sorted(missing)}")
@@ -70,6 +83,8 @@ class RiskScorer:
             conditions=conditions,
             factors=factors,
             data_sufficiency=result.answers[DATA_SUFFICIENCY.key].value,
+            acute_probability=result.answers[ACUTE_SCREEN.key].value,
+            urgent_probability=result.answers[URGENT_SCREEN.key].value,
             completeness=profile.completeness(),
             model=result.model,
             request_id=result.request_id,

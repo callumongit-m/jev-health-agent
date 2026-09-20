@@ -23,6 +23,7 @@ from health_agent.domain.conditions import (
     CONDITIONS,
     DATA_SUFFICIENCY,
     FACTORS,
+    SCREENS,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,8 @@ def _build_questions() -> dict[str, Any]:
         c.key: Noul(instructions=c.instructions) for c in CONDITIONS
     }
     questions[DATA_SUFFICIENCY.key] = Noul(instructions=DATA_SUFFICIENCY.instructions)
+    for screen in SCREENS:
+        questions[screen.key] = Noul(instructions=screen.instructions)
     for f in FACTORS:
         questions[f.key] = Score(instructions=f.instructions, criteria=list(f.levels))
     return questions
@@ -153,7 +156,7 @@ DEFAULT_OPENROUTER_MODEL = "~typesafe/jev-latest"
 def _questions_wire() -> dict[str, Any]:
     """The question set as raw JSON, matching the Decisions wire format."""
     questions: dict[str, Any] = {}
-    for c in (*CONDITIONS, DATA_SUFFICIENCY):
+    for c in (*CONDITIONS, DATA_SUFFICIENCY, *SCREENS):
         questions[c.key] = {"type": "noul", "instructions": c.instructions}
     for f in FACTORS:
         questions[f.key] = {
@@ -399,6 +402,23 @@ class FakeBackend:
         known = sum(1 for k, v in state.items() if not k.startswith("_") and v is not None)
         answers[DATA_SUFFICIENCY.key] = RawAnswer(
             kind="noul", value=self._jitter(_ramp(known, 4.0, 14.0))
+        )
+
+        # Offline stand-in for the acute screens. Real Jev reads meaning;
+        # this only reads the words, which is the whole reason the real one
+        # is worth calling.
+        blob = " ".join(
+            str(v).lower()
+            for k, v in state.items()
+            if k in ("symptoms", "_free_text") or k.startswith("_note")
+        )
+        answers[SCREENS[0].key] = RawAnswer(
+            kind="noul",
+            value=0.9 if any(w in blob for w in ("chest pain", "stroke", "collapse")) else 0.02,
+        )
+        answers[SCREENS[1].key] = RawAnswer(
+            kind="noul",
+            value=0.8 if any(w in blob for w in ("blood", "vomit", "weight loss")) else 0.05,
         )
 
         # (severity, is there actually evidence for this factor?)

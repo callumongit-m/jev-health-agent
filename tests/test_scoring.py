@@ -137,7 +137,8 @@ def test_openrouter_backend_parses_the_documented_response(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer sk-or-test"
     assert captured["json"]["model"] == "~typesafe/jev-latest"
     assert captured["json"]["state"] == {"age": 54, "bmi": 30.9}
-    assert len(captured["json"]["questions"]) == 15
+    # 7 conditions + 7 factors + sufficiency + 2 acute screens
+    assert len(captured["json"]["questions"]) == 17
 
     assert result.request_id == "gen-abc123"
     assert result.answers["t2d_10yr"].value == 0.61

@@ -62,6 +62,15 @@ def _gate(state: AgentState) -> Literal["reason", "clarify"]:
     return "reason"
 
 
+def _after_classify(state: AgentState) -> Literal["reason", "compose", "clarify", "__end__"]:
+    """The classifier screens the person's own words in the same call that
+    scores them, so an emergency it spots stops everything here -- after
+    the scoring, but before any of it is shown."""
+    if state.get("status") == "seek_care":
+        return END
+    return _after_gate(state)
+
+
 def _after_gate(state: AgentState) -> Literal["reason", "compose", "clarify"]:
     """In data mode the calling model writes the report, so no LLM runs here.
 
@@ -96,7 +105,7 @@ def build_graph(scorer: RiskScorer | None = None, *, checkpointer=None):
     builder.add_edge("ingest", "screen")
     builder.add_conditional_edges("screen", _after_screen, ["classify", END])
     builder.add_conditional_edges(
-        "classify", _after_gate, ["reason", "compose", "clarify"]
+        "classify", _after_classify, ["reason", "compose", "clarify", END]
     )
     builder.add_edge("compose", END)
     builder.add_edge("clarify", END)

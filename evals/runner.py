@@ -174,6 +174,9 @@ def build_checks(suite: str) -> list[tuple[str, str, C.CheckFn]]:
              C.check_a_crisis_reading_stops_the_assessment())
         )
         built.append(
+            ("classifier_screen", "graph", C.check_classifier_screen_is_wired())
+        )
+        built.append(
             ("asks_age_appropriate", "graph", C.check_asks_only_for_what_the_age_needs())
         )
 

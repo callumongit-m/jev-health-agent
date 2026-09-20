@@ -106,6 +106,10 @@ class RiskAssessment(BaseModel):
     factors: list[FactorScore]
     data_sufficiency: float = Field(ge=0.0, le=1.0)
     completeness: float = Field(ge=0.0, le=1.0)
+    #: Screens, asked in the same call. A keyword screen is deterministic
+    #: and brittle; these catch what it cannot phrase-match.
+    acute_probability: float = Field(default=0.0, ge=0.0, le=1.0)
+    urgent_probability: float = Field(default=0.0, ge=0.0, le=1.0)
     model: str
     request_id: str | None = None
     latency_ms: float | None = None

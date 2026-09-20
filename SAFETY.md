@@ -62,6 +62,15 @@ respiratory, bleeding, neurological, sepsis, diabetic emergencies, and mental
 health crisis. A match short-circuits everything and returns urgent-care
 guidance instead, with no risk score at all.
 
+There are two nets. Keyword matching is deterministic, free, instant and
+works offline, so it is the floor. It is also brittle: tested against
+emergencies described the way people actually describe them, it missed six
+out of six — including "elephant sitting on my chest, left arm numb", the
+most recognisable description of a heart attack there is. So the classifier
+is asked the same question, in the same call that does the scoring, and sees
+the person's own words. On that test it got all ten cases right. Either net
+firing stops the assessment.
+
 The screen is deliberately over-inclusive. A false positive costs one
 unnecessary "please get this looked at"; a false negative could cost far more.
 It is tuned against both directions — "I do not want to live" and exertional

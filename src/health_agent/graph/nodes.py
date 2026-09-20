@@ -114,12 +114,39 @@ def make_nodes(scorer: RiskScorer):
         }
 
     def classify(state: AgentState) -> dict:
-        """One Jev call, then the age-aware evidence check. No LLM involved."""
+        """One Jev call, then the age-aware evidence check. No LLM involved.
+
+        The call also carries the acute screens, so the classifier sees the
+        person's own words before any of this is shown to them.
+        """
+        from health_agent.domain.conditions import ACUTE_THRESHOLD, URGENT_THRESHOLD
+
         profile = state["profile"]
-        return {
-            "assessment": scorer.score(profile),
+        free_text = " ".join(
+            t for t in [state.get("raw_text"), *profile.symptoms] if t
+        )
+        assessment = scorer.score(profile, free_text=free_text or None)
+        result: dict = {
+            "assessment": assessment,
             "evidence": evidence_rules.assess(profile),
         }
+
+        if assessment.acute_probability >= ACUTE_THRESHOLD:
+            result |= {
+                "status": "seek_care",
+                "red_flags": ["classifier_acute"],
+                "answer": safety.EMERGENCY,
+            }
+        elif assessment.urgent_probability >= URGENT_THRESHOLD:
+            existing = state.get("urgent_guidance") or ""
+            note = (
+                "From what you have described, this is worth having assessed "
+                "by a clinician within the next few days rather than waiting "
+                "to see whether it passes. Contact your GP, or call 111 if "
+                "you cannot get an appointment."
+            )
+            result["urgent_guidance"] = (existing + "\n\n" + note).strip()
+        return result
 
     def clarify(state: AgentState) -> dict:
         """Ask for exactly what this person's age band needs, and say why.

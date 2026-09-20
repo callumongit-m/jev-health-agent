@@ -1027,3 +1027,61 @@ def check_a_crisis_reading_stops_the_assessment() -> CheckFn:
         return CheckResult(True)
 
     return run
+
+
+def check_classifier_screen_is_wired() -> CheckFn:
+    """The screens must actually reach the routing.
+
+    Keyword matching is deterministic and brittle -- measured against
+    paraphrased emergencies it missed six of six, including "elephant
+    sitting on my chest, left arm numb". The classifier caught all of them.
+    Both nets are load-bearing, so both are checked.
+    """
+
+    from health_agent.domain.conditions import ACUTE_SCREEN, URGENT_SCREEN
+    from health_agent.scoring.backend import RawAnswer
+
+    PROFILE = {
+        "age": 54, "sex": "male", "height_cm": 178.0, "weight_kg": 92.0,
+        "smoking_status": "former", "alcohol_units_per_week": 10.0,
+        "moderate_activity_minutes_per_week": 90, "sleep_hours_avg": 7.0,
+        "on_bp_medication": False, "previously_high_glucose": False,
+        "eats_vegetables_daily": True,
+    }
+
+    def run(scorer: RiskScorer) -> CheckResult:
+        backend = scorer.backend
+        original = type(backend).classify
+
+        def forced(key, value):
+            def classify(self, state):
+                result = original(self, state)
+                answers = dict(result.answers)
+                answers[key] = RawAnswer(kind="noul", value=value)
+                return type(result)(answers=answers, model=result.model,
+                                    request_id=result.request_id)
+            return classify
+
+        profile = HealthProfile(**PROFILE)
+        try:
+            type(backend).classify = forced(ACUTE_SCREEN.key, 0.95)
+            acute = _assess(scorer, profile, "something is very wrong")
+            if acute["status"] != "seek_care":
+                return CheckResult(
+                    False, f"acute screen ignored: status {acute['status']!r}"
+                )
+            if "risk" in acute:
+                return CheckResult(False, "scored someone the screen flagged")
+
+            type(backend).classify = forced(URGENT_SCREEN.key, 0.9)
+            urgent = _assess(scorer, profile, "something feels off")
+            if urgent["status"] != "complete":
+                return CheckResult(False, "urgent wrongly treated as an emergency")
+            if "next few days" not in (urgent.get("act_on_this_first") or ""):
+                return CheckResult(False, "urgent screen never reached the report")
+        finally:
+            type(backend).classify = original
+
+        return CheckResult(True)
+
+    return run
