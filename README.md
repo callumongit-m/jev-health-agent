@@ -130,6 +130,50 @@ confidence and saturated to account for overlap. The language model chooses
 and explains; the arithmetic is deterministic, so the same profile always
 gives the same number.
 
+## It asks, rather than handing you a form
+
+A clinician does not work through a questionnaire. They ask something,
+listen, and let the answer decide the next question — then stop when the
+picture is clear. A form cannot, because it is written before it knows
+anything about you.
+
+`next_question` does. At each step every unanswered question is simulated
+across its plausible range, and whichever would move *this person's*
+estimate most gets asked. Measured against the same questions in a fixed
+order, it reaches the same accuracy in about half the questions:
+
+| questions answered | fixed order | adaptive |
+|---|---:|---:|
+| 1 | 7.0% error | **4.5%** |
+| 2 | 3.8% | **1.8%** |
+| 3 | 4.0% | **1.8%** |
+
+Knowing when to *stop* matters as much as what to ask. It ends when
+nothing left would move the estimate by more than three points, rather
+than marching through a list — so a fit 23-year-old is not asked for a
+cholesterol panel that would change nothing.
+
+"I don't know" is a real answer and moves things on. Without that the
+same question comes back forever, which is what it did first time.
+
+## And it says what is worth measuring next
+
+The one thing here a language model cannot do by reasoning. Asked which
+test someone should get, a model produces a sensible list — the same list
+for everyone. This scores *this* person across each unknown's plausible
+range and reports how far the answer actually moves, weighted by how easy
+the thing is to obtain:
+
+```
+blood pressure     moves it 18%   Free at most pharmacies, no appointment.
+kidney function    moves it 19%   A blood test, ordered alongside others.
+waist measurement  moves it  5%   A tape measure, at the navel.
+```
+
+Blood pressure ranks above the eGFR that swings slightly further, because
+the useful answer is not the most informative test in principle but the
+most informative thing someone could go and do today.
+
 ## The host renders the UI
 
 There is no interface, so the calling model is the interface. The contract

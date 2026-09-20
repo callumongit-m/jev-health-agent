@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from health_agent import safety
@@ -14,6 +16,8 @@ from health_agent.graph.reasoner import SYSTEM_PROMPT, get_reasoner
 from health_agent.graph.state import AgentState
 from health_agent.privacy import DISCLAIMER, NOTICE
 from health_agent.scoring.scorer import RiskScorer
+
+logger = logging.getLogger(__name__)
 
 #: Highest-value missing fields, most informative first. The clarify node asks
 #: for these rather than dumping the whole form back at the caller.
@@ -234,15 +238,14 @@ def make_nodes(scorer: RiskScorer):
             ],
         )
 
-        # Where the numbers land if nothing changes. One classifier call
-        # per decade, run concurrently, which is only affordable because
-        # the classifier is cheap.
-        projection = projection_rules.build(profile, scorer)
-
-        # The one thing a language model cannot work out by reasoning:
-        # which of the things they have not told us would actually change
-        # the answer, for them.
-        suggestions = measuring_rules.rank(profile, scorer)
+        # Both of these are enrichments: they make the report better and
+        # the report is still worth having without them. They also multiply
+        # the number of classifier calls by about twenty, so they are where
+        # a rate limit or an exhausted balance shows up first -- and losing
+        # someone's whole assessment to a failed extra is the wrong trade.
+        projection = _optional("projection", projection_rules.build, profile, scorer)
+        suggestions = _optional("worth_measuring", measuring_rules.rank,
+                                profile, scorer) or []
 
         contract = presentation_rules.build(
             assessment,
@@ -284,6 +287,19 @@ def make_nodes(scorer: RiskScorer):
         "reason": reason,
         "respond": respond,
     }
+
+
+def _optional(name: str, fn, *args):
+    """Run an enrichment, or carry on without it.
+
+    The scored assessment is the thing someone came for. An extra that
+    fails -- rate limited, out of credit, slow -- must not take it down.
+    """
+    try:
+        return fn(*args)
+    except Exception as exc:
+        logger.warning("%s unavailable, continuing without it: %s", name, exc)
+        return None
 
 
 def _brief(state: AgentState) -> str:

@@ -67,6 +67,11 @@ def _privacy_footer(payload: dict[str, Any]) -> dict[str, Any]:
         "Estimate this person's probability of developing common chronic "
         "conditions and which areas of their life carry the most weight in "
         "that picture.\n\n"
+        "PREFER `next_question` over asking for everything at once. It "
+        "picks the one question that would move this person's estimate "
+        "most, and tells you when to stop -- which is usually well before "
+        "the list below is exhausted. Use the list only if they would "
+        "rather give everything in one go.\n\n"
         "ASK FOR THESE, IN THIS ORDER. They are ordered by how much they "
         "change the answer:\n"
         "  1. Age and sex -- without age there is no estimate at all.\n"
@@ -153,6 +158,68 @@ def assess_health(
         assess({k: v for k, v in fields.items() if v is not None},
                raw_text=notes, thread_id=thread_id)
     )
+
+
+@server.tool(
+    name="next_question",
+    title="What to ask next",
+    description=(
+        "Run the consultation one question at a time instead of handing "
+        "someone a form.\n\n"
+        "Pass whatever they have told you so far, plus `unknown` listing "
+        "anything they were asked and could not answer. Returns the single "
+        "question worth asking next, or tells you there is nothing left "
+        "that would meaningfully change the estimate -- at which point call "
+        "`assess_health`.\n\n"
+        "Each question is chosen by simulating the plausible answers and "
+        "seeing which one moves the estimate most for THIS person, so it is "
+        "not a fixed list. Measured against asking in a fixed order it "
+        "reaches the same accuracy in about half the questions.\n\n"
+        "Ask the returned question in your own words if you prefer, but ask "
+        "that one, and one at a time -- the point is that the next question "
+        "depends on this answer.\n\n" + NOTICE
+    ),
+)
+def next_question(
+    age: Annotated[int | None, Field(None, ge=0, le=120)] = None,
+    sex: Annotated[Literal["male", "female", "other"] | None, Field(None)] = None,
+    height_cm: Annotated[str | float | None, Field(None)] = None,
+    weight_kg: Annotated[str | float | None, Field(None)] = None,
+    waist_cm: Annotated[str | float | None, Field(None)] = None,
+    systolic_bp: Annotated[int | None, Field(None, ge=50, le=300)] = None,
+    diastolic_bp: Annotated[int | None, Field(None, ge=30, le=200)] = None,
+    resting_hr: Annotated[int | None, Field(None, ge=25, le=220)] = None,
+    hba1c_mmol_mol: Annotated[str | float | None, Field(None)] = None,
+    total_cholesterol_mmol_l: Annotated[str | float | None, Field(None)] = None,
+    egfr: Annotated[float | None, Field(None, ge=1, le=200)] = None,
+    smoking_status: Annotated[Literal["never", "former", "current"] | None, Field(None)] = None,
+    alcohol_units_per_week: Annotated[float | None, Field(None, ge=0, le=200)] = None,
+    moderate_activity_minutes_per_week: Annotated[int | None, Field(None, ge=0, le=5000)] = None,
+    sleep_hours_avg: Annotated[float | None, Field(None, ge=0, le=24)] = None,
+    diet_quality_self_rating: Annotated[int | None, Field(None, ge=1, le=5)] = None,
+    perceived_stress_rating: Annotated[int | None, Field(None, ge=1, le=5)] = None,
+    on_bp_medication: Annotated[bool | None, Field(None)] = None,
+    previously_high_glucose: Annotated[bool | None, Field(None)] = None,
+    eats_vegetables_daily: Annotated[bool | None, Field(None)] = None,
+    unknown: Annotated[list[str] | None, Field(None, description="fields they were asked and did not know -- without this the same question comes back")] = None,
+) -> dict[str, Any]:
+    from health_agent.domain.consultation import next_step
+    from health_agent.domain.profile import HealthProfile
+    from health_agent.domain.units import normalise
+    from health_agent.scoring.backend import get_backend
+    from health_agent.scoring.scorer import RiskScorer
+
+    raw = {k: v for k, v in locals().items()
+           if v is not None and k not in ("unknown", "Any")}
+    clean, _, problems = normalise(raw)
+    profile = HealthProfile(**{k: v for k, v in clean.items()
+                               if k in HealthProfile.model_fields})
+
+    step = next_step(profile, RiskScorer(get_backend()), skipped=unknown or [])
+    payload = step.as_dict()
+    if problems:
+        payload["unit_problems"] = problems
+    return _privacy_footer(payload)
 
 
 @server.tool(

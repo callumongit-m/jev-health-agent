@@ -31,8 +31,9 @@ async def test_mcp_exposes_the_expected_tools():
 
     names = {t.name for t in await server.list_tools()}
     assert names == {
-        "assess_health", "life_expectancy", "start_health_sync",
-        "connect_wearable", "set_health_reminder", "delete_my_data",
+        "assess_health", "next_question", "life_expectancy",
+        "start_health_sync", "connect_wearable", "set_health_reminder",
+        "delete_my_data",
     }
 
 

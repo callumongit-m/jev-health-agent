@@ -229,3 +229,49 @@ def test_narrated_mode_still_produces_prose(scorer, narrated):
     out = assess(COMPLETE, scorer=scorer)
     assert out.get("answer"), "narrated mode must still write a report"
     assert "presentation" not in out
+
+
+# --- enrichments must not be able to take the report down --------------
+
+def test_a_failing_projection_does_not_lose_the_assessment(scorer, monkeypatch):
+    """Found the hard way: an exhausted API balance during the projection
+    raised straight through and cost the whole report. The scored
+    assessment is what someone came for."""
+    from health_agent.domain import projection as projection_rules
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("402 Payment Required")
+
+    monkeypatch.setattr(projection_rules, "build", explode)
+    out = assess(COMPLETE, scorer=scorer)
+    assert out["status"] == "complete"
+    assert out["risk"], "the assessment itself must survive"
+    assert "projection" not in out["presentation"]
+
+
+def test_a_failing_suggestion_ranking_does_not_lose_the_assessment(scorer, monkeypatch):
+    from health_agent.domain import worth_measuring as measuring_rules
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("rate limited")
+
+    monkeypatch.setattr(measuring_rules, "rank", explode)
+    out = assess(COMPLETE, scorer=scorer)
+    assert out["status"] == "complete"
+    assert out["risk"]
+    assert "worth_measuring" not in out["presentation"]
+
+
+def test_both_failing_still_gives_a_usable_report(scorer, monkeypatch):
+    from health_agent.domain import projection as projection_rules
+    from health_agent.domain import worth_measuring as measuring_rules
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("everything is down")
+
+    monkeypatch.setattr(projection_rules, "build", explode)
+    monkeypatch.setattr(measuring_rules, "rank", explode)
+    out = assess(COMPLETE, scorer=scorer)
+    assert out["risk"] and out["presentation"]["risk_table"]["rows"]
+    verbatim = " ".join(out["presentation"]["must_include_verbatim"])
+    assert "not professional medical advice" in verbatim
