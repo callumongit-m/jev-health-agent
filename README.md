@@ -46,6 +46,12 @@ questions — seven conditions, seven modifiable factors, one data-sufficiency
 check — go out in a single call that costs a fraction of a penny and returns
 in under a second. No language model is involved in producing a probability.
 
+**Recommendations cite their evidence.** Every factor carries NHS guidance
+for *what* to do, and the systematic reviews behind it for *how much it
+helps* — the number a model would otherwise invent. NHS content is reused
+under the Open Government Licence with the required attribution; the reviews
+come from Europe PMC, which is open and needs no key.
+
 **The calling model does the explaining, on its own budget.** Over MCP the
 caller is already a capable model sitting in the person's own subscription,
 with the conversation context. Running a second model to produce prose the

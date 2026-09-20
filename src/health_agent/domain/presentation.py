@@ -201,6 +201,11 @@ def build(
             "its source and link rather than asserting the fact yourself. "
             "Do not invent statistics, effect sizes or guideline numbers "
             "that are not in `evidence`.",
+            "An entry's `research` list is there to show what a "
+            "recommendation rests on -- name the review and link it. Do not "
+            "quote findings from it, and do not treat a paper title as "
+            "advice. The advice comes from the guidance; the research is "
+            "the reason to believe it.",
         ),
         ranked_actions=tuple(actions),
         framing={

@@ -221,7 +221,12 @@ def guidance_for(key: str, *, kind: str = "condition") -> dict[str, Any] | None:
     return entry.as_dict() if entry else None
 
 
-def collect(condition_keys: list[str], factor_keys: list[str]) -> list[dict[str, Any]]:
+def collect(
+    condition_keys: list[str],
+    factor_keys: list[str],
+    *,
+    with_research: bool = True,
+) -> list[dict[str, Any]]:
     """Guidance for what the report is actually going to talk about.
 
     Scoped to the top findings rather than everything, because a wall of
@@ -238,5 +243,13 @@ def collect(condition_keys: list[str], factor_keys: list[str]) -> list[dict[str,
         entry = guidance_for(key, kind="factor")
         if entry and entry["url"] not in seen:
             seen.add(entry["url"])
+            if with_research:
+                # Guidance says what to do; the reviews say how much it
+                # helps, which is the number a model would otherwise invent.
+                from health_agent.evidence import literature
+
+                papers = literature.for_factor(key)
+                if papers:
+                    entry = {**entry, "research": papers}
             out.append(entry)
     return out

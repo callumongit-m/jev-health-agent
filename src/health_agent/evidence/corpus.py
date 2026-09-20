@@ -18,6 +18,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+#: NHS Digital content is available under the Open Government Licence v3.0,
+#: which permits reuse including commercially, on condition of attribution.
+#: This is that attribution, and it travels with every entry.
+OGL_ATTRIBUTION = (
+    "Information from NHS Digital, licenced under the current version of "
+    "the Open Government Licence."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Guidance:
     key: str
@@ -32,6 +41,7 @@ class Guidance:
             "points": list(self.points),
             "source": self.source,
             "url": self.url,
+            "licence": OGL_ATTRIBUTION,
         }
 
 
